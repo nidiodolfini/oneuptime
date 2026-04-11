@@ -15,6 +15,8 @@ import { extractOneuptimeLabelNames } from "../Utils/Telemetry/OneuptimeLabel";
 import CaptureSpan from "../Utils/Telemetry/CaptureSpan";
 import SortOrder from "../../Types/BaseDatabase/SortOrder";
 import logger from "../Utils/Logger";
+import QueryHelper from "../Types/Database/QueryHelper";
+import Sleep from "../../Types/Sleep";
 
 export enum OtelAggregationTemporality {
   Cumulative = "AGGREGATION_TEMPORALITY_CUMULATIVE",
@@ -109,18 +111,30 @@ export default class OTelIngestService {
     dataRententionInDays: number;
   }> {
     /*
-     * Sort by createdAt ASC for deterministic resolution if the
-     * DB ever ends up with duplicates (defense in depth — the
-     * unique index on (projectId, name) added in
-     * DedupeServicesAndAddUniqueIndex1778100000000 prevents new
-     * ones from forming, and converts concurrent first-contact
-     * inserts into unique-violation errors that the catch block
-     * below resolves to the winning row).
+     * Case-insensitive + whitespace-trimmed match consistently in both
+     * initial lookup and post-conflict re-fetch. The
+     * `DatabaseService.checkUniqueColumnBy` pre-create hook rejects
+     * duplicates with LOWER(name) = LOWER(?), so a prior worker may have
+     * inserted a row whose stored case differs from the OTLP attribute
+     * we just received. An exact-match re-fetch would miss the existing
+     * row and the handler would throw "Failed to create or find service",
+     * dropping the entire OTLP batch.
+     *
+     * Sort by createdAt ASC for deterministic resolution if the DB ever
+     * ends up with duplicates (defense in depth — the unique index on
+     * (projectId, name) added in
+     * DedupeServicesAndAddUniqueIndex1778100000000 prevents new ones
+     * from forming, and converts concurrent first-contact inserts into
+     * unique-violation errors that the catch block below resolves to
+     * the winning row).
      */
+    const nameMatcher: ReturnType<typeof QueryHelper.findWithSameText> =
+      QueryHelper.findWithSameText(data.serviceName);
+
     const service: Service | null = await ServiceService.findOneBy({
       query: {
         projectId: data.projectId,
-        name: data.serviceName,
+        name: nameMatcher,
       },
       select: {
         _id: true,
@@ -134,48 +148,74 @@ export default class OTelIngestService {
       },
     });
 
-    if (!service) {
-      const projectDefaultRetention: number =
-        await this.getProjectDefaultRetentionInDays(data.projectId);
-
-      try {
-        const newService: Service = new Service();
-        newService.projectId = data.projectId;
-        newService.name = data.serviceName;
-        newService.description = data.serviceName;
-
-        const createdService: Service = await ServiceService.create({
-          data: newService,
-          props: {
-            isRoot: true,
-          },
-        });
-
+    if (service) {
+      if (service.retainTelemetryDataForDays) {
         return {
-          serviceId: createdService.id!,
-          dataRententionInDays: projectDefaultRetention,
+          serviceId: service.id!,
+          dataRententionInDays: service.retainTelemetryDataForDays,
         };
-      } catch {
-        /*
-         * Race condition: another request created the service concurrently.
-         * Re-fetch the existing service (oldest wins, see sort above).
-         */
-        const existingService: Service | null = await ServiceService.findOneBy({
-          query: {
-            projectId: data.projectId,
-            name: data.serviceName,
+      }
+      return {
+        serviceId: service.id!,
+        dataRententionInDays: await this.getProjectDefaultRetentionInDays(
+          data.projectId,
+        ),
+      };
+    }
+
+    const projectDefaultRetention: number =
+      await this.getProjectDefaultRetentionInDays(data.projectId);
+
+    try {
+      const newService: Service = new Service();
+      newService.projectId = data.projectId;
+      newService.name = data.serviceName;
+      newService.description = data.serviceName;
+      newService.retainTelemetryDataForDays = projectDefaultRetention;
+
+      const createdService: Service = await ServiceService.create({
+        data: newService,
+        props: {
+          isRoot: true,
+        },
+      });
+
+      return {
+        serviceId: createdService.id!,
+        dataRententionInDays: projectDefaultRetention,
+      };
+    } catch {
+      /*
+       * Race condition: another worker created the same service between
+       * our lookup and our create. Re-fetch with bounded retry to cover
+       * the brief window where the winning worker's transaction is still
+       * committing and its row is not yet visible to our session under
+       * read-committed isolation. Total worst-case wait is ~375ms spread
+       * across 5 attempts. If all retries fail, bubble the original
+       * "Failed to create or find" error.
+       */
+      const maxAttempts: number = 5;
+      const baseDelayMs: number = 25;
+
+      for (let attempt: number = 0; attempt < maxAttempts; attempt++) {
+        const existingService: Service | null = await ServiceService.findOneBy(
+          {
+            query: {
+              projectId: data.projectId,
+              name: nameMatcher,
+            },
+            select: {
+              _id: true,
+              retainTelemetryDataForDays: true,
+            },
+            sort: {
+              createdAt: SortOrder.Ascending,
+            },
+            props: {
+              isRoot: true,
+            },
           },
-          select: {
-            _id: true,
-            retainTelemetryDataForDays: true,
-          },
-          sort: {
-            createdAt: SortOrder.Ascending,
-          },
-          props: {
-            isRoot: true,
-          },
-        });
+        );
 
         if (existingService) {
           return {
@@ -186,25 +226,14 @@ export default class OTelIngestService {
           };
         }
 
-        throw new Error(
-          "Failed to create or find service: " + data.serviceName,
-        );
+        // Exponential-ish backoff: 25ms, 50ms, 75ms, 100ms, 125ms
+        await Sleep.sleep(baseDelayMs * (attempt + 1));
       }
-    }
 
-    if (service.retainTelemetryDataForDays) {
-      return {
-        serviceId: service.id!,
-        dataRententionInDays: service.retainTelemetryDataForDays,
-      };
+      throw new Error(
+        "Failed to create or find service: " + data.serviceName,
+      );
     }
-
-    return {
-      serviceId: service.id!,
-      dataRententionInDays: await this.getProjectDefaultRetentionInDays(
-        data.projectId,
-      ),
-    };
   }
   @CaptureSpan()
   public static getMetricFromDatapoint(data: {
