@@ -15,6 +15,7 @@ import { extractOneuptimeLabelNames } from "../Utils/Telemetry/OneuptimeLabel";
 import CaptureSpan from "../Utils/Telemetry/CaptureSpan";
 import SortOrder from "../../Types/BaseDatabase/SortOrder";
 import QueryHelper from "../Types/Database/QueryHelper";
+import Sleep from "../../Types/Sleep";
 import logger from "../Utils/Logger";
 import TelemetryRetentionConfig from "../../Types/Telemetry/TelemetryRetentionConfig";
 import ServiceType from "../../Types/Telemetry/ServiceType";
@@ -556,29 +557,43 @@ export default class OTelIngestService {
         return buildMetadata(createdService);
       } catch {
         /*
-         * Race condition: another request created the service concurrently.
-         * Re-fetch the existing service (oldest wins, see sort above).
+         * Race condition: another worker created the same service between our
+         * lookup and our create. Re-fetch with bounded retry (case-insensitive
+         * via findWithSameText) to cover the brief commit-propagation window
+         * under read-committed isolation, where a single re-fetch can race
+         * ahead of the concurrent INSERT. ~375ms worst case across 5 attempts;
+         * throws only if every retry misses. (FIX A — case-insensitive match —
+         * is already upstream; this carries only the bounded-retry FIX B.)
          */
-        const existingService: Service | null = await ServiceService.findOneBy({
-          query: {
-            projectId: data.projectId,
-            name: QueryHelper.findWithSameText(data.serviceName),
-          },
-          select: {
-            _id: true,
-            retainTelemetryDataForDays: true,
-            telemetryRetentionConfig: true,
-          },
-          sort: {
-            createdAt: SortOrder.Ascending,
-          },
-          props: {
-            isRoot: true,
-          },
-        });
+        const maxAttempts: number = 5;
+        const baseDelayMs: number = 25;
 
-        if (existingService) {
-          return buildMetadata(existingService);
+        for (let attempt: number = 0; attempt < maxAttempts; attempt++) {
+          const existingService: Service | null =
+            await ServiceService.findOneBy({
+              query: {
+                projectId: data.projectId,
+                name: QueryHelper.findWithSameText(data.serviceName),
+              },
+              select: {
+                _id: true,
+                retainTelemetryDataForDays: true,
+                telemetryRetentionConfig: true,
+              },
+              sort: {
+                createdAt: SortOrder.Ascending,
+              },
+              props: {
+                isRoot: true,
+              },
+            });
+
+          if (existingService) {
+            return buildMetadata(existingService);
+          }
+
+          // Exponential-ish backoff: 25ms, 50ms, 75ms, 100ms, 125ms
+          await Sleep.sleep(baseDelayMs * (attempt + 1));
         }
 
         throw new Error(
