@@ -205,6 +205,23 @@ if (DisableQueueWorkers) {
         job.data as TelemetryIngestJobData;
 
       /*
+       * Defensive: BullMQ can occasionally hand us job objects whose underlying
+       * Redis hash has lost its `data` field (a stalled job recovered
+       * concurrently with removeOnComplete/removeOnFail cleanup, replayed with
+       * `job.data` materialized as an empty object). Without this guard every
+       * such replay throws "Unknown telemetry type: undefined" and floods the
+       * log with non-actionable noise. `!jobData?.type` covers
+       * null/undefined/empty-object in a single check. Skip silently (debug)
+       * instead of throwing.
+       */
+      if (!jobData?.type) {
+        logger.debug(
+          `Skipping telemetry job ${job.id ?? "?"}: missing or empty data (likely a stalled-job orphan)`,
+        );
+        return;
+      }
+
+      /*
        * Whether this job's ClickHouse writes carry deterministic per-job
        * insert_deduplication_tokens (inserted one statement per submission)
        * or stay untokened so TelemetryFanInWriter merges them into fat
