@@ -369,7 +369,7 @@ export class Service extends DatabaseService<Model> {
                 "ownerTeams"
               ] as Array<ObjectID>) || [],
               false,
-              onCreate.createBy.props,
+              { isRoot: true },
             );
           }
           return Promise.resolve();
