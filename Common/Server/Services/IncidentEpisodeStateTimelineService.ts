@@ -339,7 +339,7 @@ export class Service extends DatabaseService<IncidentEpisodeStateTimeline> {
           _id: createdItem.incidentEpisodeId?.toString(),
         },
         data: updateData,
-        props: onCreate.createBy.props,
+        props: { isRoot: true },
       });
 
       // Cascade state change to all member incidents
