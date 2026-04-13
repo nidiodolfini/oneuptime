@@ -811,7 +811,7 @@ export class Service extends DatabaseService<Model> {
                 "ownerTeams"
               ] as Array<ObjectID>) || [],
               false,
-              onCreate.createBy.props,
+              { isRoot: true },
             );
           }
           return Promise.resolve();
@@ -1222,7 +1222,7 @@ ${incident.remediationNotes || "No remediation notes provided."}
   @CaptureSpan()
   private async handleMonitorStatusChangeAsync(
     createdItem: Model,
-    onCreate: OnCreate<Model>,
+    _onCreate: OnCreate<Model>,
   ): Promise<void> {
     try {
       if (createdItem.changeMonitorStatusToId && createdItem.projectId) {
@@ -1240,7 +1240,7 @@ ${incident.remediationNotes || "No remediation notes provided."}
                 "#" + createdItem.incidentNumber?.toString()) +
               " was created.",
           createdItem.createdStateLog,
-          onCreate.createBy.props,
+          { isRoot: true },
           createdItem.declaredAt || undefined,
         );
       }
@@ -2053,7 +2053,7 @@ ${incidentSeverity.name}
                   incidentNumberDisplay +
                   " was updated.",
                 undefined,
-                onUpdate.updateBy.props,
+                { isRoot: true },
               );
             }
           }
