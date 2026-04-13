@@ -968,7 +968,7 @@ ${createdItem.description?.trim() || "No description provided."}
             false, // notifyOwners = false
             "This status was created when the monitor was created.",
             undefined,
-            onCreate.createBy.props,
+            { isRoot: true },
           );
         } catch (error) {
           logger.error(
@@ -1019,7 +1019,7 @@ ${createdItem.description?.trim() || "No description provided."}
                 "ownerTeams"
               ] as Array<ObjectID>) || [],
               false,
-              onCreate.createBy.props,
+              { isRoot: true },
             );
           }
           return Promise.resolve();

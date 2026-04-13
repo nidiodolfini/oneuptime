@@ -450,7 +450,7 @@ export class Service extends DatabaseService<IncidentStateTimeline> {
         data: {
           currentIncidentStateId: createdItem.incidentStateId,
         },
-        props: onCreate.createBy.props,
+        props: { isRoot: true },
       });
     }
 
@@ -635,7 +635,7 @@ ${createdItem.rootCause}`,
 
       await IncidentPublicNoteService.create({
         data: incidentPublicNote,
-        props: onCreate.createBy.props,
+        props: { isRoot: true },
       });
     }
 

@@ -506,7 +506,7 @@ export class Service extends DatabaseService<MonitorStatusTimeline> {
         data: {
           currentMonitorStatusId: createdItem.monitorStatusId,
         },
-        props: onCreate.createBy.props,
+        props: { isRoot: true },
       });
     }
     return createdItem;
