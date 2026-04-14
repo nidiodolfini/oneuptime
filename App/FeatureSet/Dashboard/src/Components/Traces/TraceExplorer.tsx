@@ -36,6 +36,7 @@ import PageLoader from "Common/UI/Components/Loader/PageLoader";
 import SideOver, { SideOverSize } from "Common/UI/Components/SideOver/SideOver";
 import API from "Common/UI/Utils/API/API";
 import AnalyticsModelAPI from "Common/UI/Utils/AnalyticsModelAPI/AnalyticsModelAPI";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 import ListResult from "Common/Types/BaseDatabase/ListResult";
 import Select from "Common/Types/BaseDatabase/Select";
 import ModelAPI from "Common/UI/Utils/ModelAPI/ModelAPI";
@@ -228,7 +229,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
         const availableSpanIds: Set<string> = new Set(
           updatedSpans
             .map((span: Span) => {
-              return span.spanId?.toString();
+              return toHexId(span.spanId);
             })
             .filter((spanId: string | undefined): spanId is string => {
               return Boolean(spanId);
@@ -289,7 +290,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
           <div className="flex justify-between">
             <div className="font-medium text-gray-700">Span ID</div>
             <div className="ml-2 font-mono text-gray-800 truncate max-w-40">
-              {span.spanId?.toString()}
+              {toHexId(span.spanId)}
             </div>
           </div>
           <div className="flex justify-between items-center">
@@ -297,7 +298,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
             <div className="ml-2">
               <SpanStatusElement
                 spanStatusCode={span.statusCode!}
-                traceId={span.traceId?.toString()}
+                traceId={toHexId(span.traceId)}
                 title={
                   "Status: " +
                   SpanUtil.getSpanStatusCodeFriendlyName(span.statusCode!)
@@ -399,7 +400,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
           <div className="mt-0.5">
             <SpanStatusElement
               spanStatusCode={span.statusCode!}
-              traceId={span.traceId?.toString()}
+              traceId={toHexId(span.traceId)}
               title={
                 "Status: " +
                 SpanUtil.getSpanStatusCodeFriendlyName(span.statusCode!)
@@ -503,7 +504,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
     const currentSpanId: string | undefined = currentSpan.spanId;
 
     const childSpans: Array<Span> = allSpans.filter((span: Span) => {
-      return span.parentSpanId?.toString() === currentSpanId?.toString();
+      return toHexId(span.parentSpanId) === currentSpanId?.toString();
     });
 
     for (const span of childSpans) {
@@ -882,7 +883,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
     const allSpanIds: Set<string> = new Set(
       displaySpans
         .map((s: Span) => {
-          return s.spanId?.toString();
+          return toHexId(s.spanId);
         })
         .filter((id: string | undefined): id is string => {
           return Boolean(id);
@@ -890,7 +891,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
     );
 
     const rootSpans: Span[] = displaySpans.filter((span: Span) => {
-      const p: string | undefined = span.parentSpanId?.toString();
+      const p: string | undefined = toHexId(span.parentSpanId);
       if (!p || p.trim() === "") {
         return true; // explicit root
       }
@@ -952,7 +953,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
     const displaySpanIds: Set<string> = new Set(
       displaySpans
         .map((span: Span) => {
-          return span.spanId?.toString();
+          return toHexId(span.spanId);
         })
         .filter((id: string | undefined): id is string => {
           return Boolean(id);
@@ -1582,7 +1583,7 @@ const TraceExplorer: FunctionComponent<ComponentProps> = (
         {selectedSpans.length > 0 && spans.length > 0 ? (
           (() => {
             const selectedSpan: Span | undefined = spans.find((span: Span) => {
-              return span.spanId?.toString() === selectedSpans[0]!;
+              return toHexId(span.spanId) === selectedSpans[0]!;
             });
 
             if (!selectedSpan) {
