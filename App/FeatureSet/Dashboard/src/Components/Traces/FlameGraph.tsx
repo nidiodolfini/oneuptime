@@ -1,4 +1,5 @@
 import SpanUtil from "../../Utils/SpanUtil";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 import CriticalPathUtil, {
   SpanData,
   SpanSelfTime,
@@ -73,8 +74,9 @@ const FlameGraph: FunctionComponent<FlameGraphProps> = (
     let tEnd: number = spans[0]!.endTimeUnixNano!;
 
     for (const span of spans) {
-      spanMap.set(span.spanId!, span);
-      allSpanIds.add(span.spanId!);
+      const sid: string = toHexId(span.spanId);
+      spanMap.set(sid, span);
+      allSpanIds.add(sid);
       if (span.startTimeUnixNano! < tStart) {
         tStart = span.startTimeUnixNano!;
       }
@@ -84,10 +86,11 @@ const FlameGraph: FunctionComponent<FlameGraphProps> = (
     }
 
     for (const span of spans) {
-      if (span.parentSpanId && allSpanIds.has(span.parentSpanId)) {
-        const children: Span[] = childrenMap.get(span.parentSpanId) || [];
+      const pid: string = toHexId(span.parentSpanId);
+      if (pid && allSpanIds.has(pid)) {
+        const children: Span[] = childrenMap.get(pid) || [];
         children.push(span);
-        childrenMap.set(span.parentSpanId, children);
+        childrenMap.set(pid, children);
       }
     }
 
@@ -109,8 +112,9 @@ const FlameGraph: FunctionComponent<FlameGraphProps> = (
       span: Span,
       depth: number,
     ): FlameGraphNode => {
-      const children: Span[] = childrenMap.get(span.spanId!) || [];
-      const selfTime: SpanSelfTime | undefined = selfTimes.get(span.spanId!);
+      const sid: string = toHexId(span.spanId);
+      const children: Span[] = childrenMap.get(sid) || [];
+      const selfTime: SpanSelfTime | undefined = selfTimes.get(sid);
       const serviceInfo: { color: Color; name: string } = getServiceInfo(span);
 
       // Sort children by start time
@@ -137,7 +141,7 @@ const FlameGraph: FunctionComponent<FlameGraphProps> = (
 
     // Find root spans
     const roots: Span[] = spans.filter((span: Span) => {
-      const p: string | undefined = span.parentSpanId;
+      const p: string = toHexId(span.parentSpanId);
       if (!p || p.trim() === "") {
         return true;
       }
