@@ -892,7 +892,7 @@ const BaseModelTable: <TBaseModel extends BaseModel | AnalyticsBaseModel>(
             await props.callbacks.getList({
               modelType: filter.filterEntityType,
               query: query,
-              limit: LIMIT_PER_PROJECT,
+              limit: 100,
               skip: 0,
               select: select,
               sort: {},
@@ -1113,7 +1113,7 @@ const BaseModelTable: <TBaseModel extends BaseModel | AnalyticsBaseModel>(
           ...query,
           ...buildSearchQueryFragment(),
         },
-        limit: LIMIT_PER_PROJECT,
+        limit: 1000,
         skip: 0,
         select: {
           _id: true,
