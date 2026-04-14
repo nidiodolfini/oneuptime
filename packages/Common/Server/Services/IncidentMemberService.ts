@@ -205,6 +205,9 @@ export class Service extends ProjectReferencesService<Model> {
         if (!person.isEmpty()) {
           const incident: MarkdownText = mdText`[Incident ${incidentNumberDisplay}](${(await IncidentService.getIncidentLinkInDashboard(projectId!, incidentId!)).toString()})`;
 
+          // Medgrupo: suppress Slack notification when a user manually removed a member via UI/API.
+          const isManualAction: boolean = Boolean(deleteByUserId);
+
           /*
            * By whoever took them off - the person (the message in Slack
            * and Teams opens with them too), the API key, the workflow -
@@ -228,7 +231,7 @@ export class Service extends ProjectReferencesService<Model> {
             userId: deleteByUserId || undefined,
             apiKeyActor: FeedApiKeyActorUtil.fromProps(onDelete.deleteBy.props),
             workspaceNotification: {
-              sendWorkspaceNotification: true,
+              sendWorkspaceNotification: !isManualAction,
               leadWithAuthor: true,
             },
           });
@@ -297,6 +300,18 @@ export class Service extends ProjectReferencesService<Model> {
         const incident: MarkdownText = mdText`[Incident ${incidentNumberDisplay}](${(await IncidentService.getIncidentLinkInDashboard(projectId!, incidentId!)).toString()})`;
 
         /*
+         * Medgrupo: suppress Slack notification when a user manually added a
+         * member via UI/API. The feed item is still created (visible in the
+         * OneUptime UI). A role OneUptime gives because a person changed the
+         * state (cause.kind "stateChange") follows from a manual action whose
+         * own state-change post is suppressed too, so it stays out of Slack;
+         * a role given by a monitor's criteria has no person behind it and
+         * still posts.
+         */
+        const isManualAction: boolean =
+          Boolean(createdByUserId) || cause?.kind === "stateChange";
+
+        /*
          * By whoever gave the role - the person (the message in Slack and
          * Teams opens with them too), the API key, the workflow, the monitor
          * - never the person given it, unless they took it themselves.
@@ -322,7 +337,7 @@ export class Service extends ProjectReferencesService<Model> {
           userId: createdByUserId || undefined,
           apiKeyActor: FeedApiKeyActorUtil.fromProps(onCreate.createBy.props),
           workspaceNotification: {
-            sendWorkspaceNotification: true,
+            sendWorkspaceNotification: !isManualAction,
             leadWithAuthor: true,
           },
         });

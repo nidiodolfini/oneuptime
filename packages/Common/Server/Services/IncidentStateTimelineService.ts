@@ -701,6 +701,12 @@ export class Service extends ProjectReferencesService<IncidentStateTimeline> {
     const projectId: ObjectID = createdItem.projectId!;
     const incidentId: ObjectID = createdItem.incidentId!;
 
+    // Suppress Slack notification when a user manually changed the state via UI/API.
+    // Automatic state changes (workflow, auto-resolve) have userId=null and still notify Slack.
+    const stateChangedByUserId: ObjectID | undefined =
+      createdItem.createdByUserId || onCreate.createBy.props.userId;
+    const isManualAction: boolean = Boolean(stateChangedByUserId);
+
     await IncidentFeedService.createIncidentFeedItem({
       incidentId: createdItem.incidentId!,
       projectId: createdItem.projectId!,
@@ -716,21 +722,22 @@ export class Service extends ProjectReferencesService<IncidentStateTimeline> {
         ? mdText`**Cause:**
 ${FeedMarkdown.asMarkdown(createdItem.rootCause)}`.toString()
         : undefined,
-      userId: createdItem.createdByUserId || onCreate.createBy.props.userId,
+      userId: stateChangedByUserId,
       apiKeyActor: FeedApiKeyActorUtil.fromProps(onCreate.createBy.props),
       workspaceNotification: {
         /*
          * Not posted to Slack and Microsoft Teams for the record's first
          * state: the message that announced the record names it already
          * (WorkspaceStateChangePosting). The feed keeps the entry.
+         * Medgrupo: nor for a state a person changed by hand (isManualAction).
          */
-        sendWorkspaceNotification: WorkspaceStateChangePosting.postsToWorkspace(
-          {
+        sendWorkspaceNotification:
+          !isManualAction &&
+          WorkspaceStateChangePosting.postsToWorkspace({
             stateBeforeThis:
               onCreate.carryForward.statusTimelineBeforeThisStatus,
             stateAfterThis: onCreate.carryForward.statusTimelineAfterThisStatus,
-          },
-        ),
+          }),
         leadWithAuthor: true,
       },
     });
