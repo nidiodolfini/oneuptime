@@ -1,5 +1,6 @@
 import SpanStatusElement from "../Span/SpanStatusElement";
 import ProjectUtil from "Common/UI/Utils/Project";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 import SortOrder from "Common/Types/BaseDatabase/SortOrder";
 import ObjectID from "Common/Types/ObjectID";
 import { DropdownOption } from "Common/UI/Components/Dropdown/Dropdown";
@@ -325,13 +326,13 @@ const TraceTable: FunctionComponent<ComponentProps> = (
             if (modelId) {
               return Promise.resolve(
                 new Route(viewRoute.toString()).addRoute(
-                  span.traceId!.toString(),
+                  toHexId(span.traceId),
                 ),
               );
             }
             return Promise.resolve(
               RouteUtil.populateRouteParams(RouteMap[PageMap.TRACE_VIEW]!, {
-                modelId: span.traceId!.toString(),
+                modelId: toHexId(span.traceId),
               }),
             );
           }}
@@ -413,9 +414,9 @@ const TraceTable: FunctionComponent<ComponentProps> = (
                 return (
                   <Fragment>
                     <SpanStatusElement
-                      traceId={span.traceId?.toString()}
+                      traceId={toHexId(span.traceId)}
                       spanStatusCode={span.statusCode!}
-                      title={span.spanId?.toString()}
+                      title={toHexId(span.spanId)}
                     />
                   </Fragment>
                 );
@@ -430,7 +431,7 @@ const TraceTable: FunctionComponent<ComponentProps> = (
               getElement: (span: Span): ReactElement => {
                 return (
                   <Fragment>
-                    <TraceElement traceId={span.traceId?.toString()} />
+                    <TraceElement traceId={toHexId(span.traceId)} />
                   </Fragment>
                 );
               },

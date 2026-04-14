@@ -31,6 +31,7 @@ import RangeStartAndEndDateTime, {
 } from "Common/Types/Time/RangeStartAndEndDateTime";
 import TimeRange from "Common/Types/Time/TimeRange";
 import TelemetryTimeRangePicker from "Common/UI/Components/TelemetryViewer/components/TelemetryTimeRangePicker";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 import Icon from "Common/UI/Components/Icon/Icon";
 import IconProp from "Common/Types/Icon/IconProp";
 
@@ -212,7 +213,7 @@ const TracesDashboard: FunctionComponent = (): ReactElement => {
         for (const span of allSpans) {
           const primaryEntityId: string =
             span.primaryEntityId?.toString() || "";
-          const traceId: string = span.traceId?.toString() || "";
+          const traceId: string = toHexId(span.traceId);
           const duration: number = (span.durationUnixNano as number) || 0;
           const summary: ServiceTraceSummary | undefined =
             summaryMap.get(primaryEntityId);
