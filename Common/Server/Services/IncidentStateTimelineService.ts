@@ -487,6 +487,12 @@ export class Service extends DatabaseService<IncidentStateTimeline> {
     const projectId: ObjectID = createdItem.projectId!;
     const incidentId: ObjectID = createdItem.incidentId!;
 
+    // Suppress Slack notification when a user manually changed the state via UI/API.
+    // Automatic state changes (workflow, auto-resolve) have userId=null and still notify Slack.
+    const stateChangedByUserId: ObjectID | undefined =
+      createdItem.createdByUserId || onCreate.createBy.props.userId;
+    const isManualAction: boolean = Boolean(stateChangedByUserId);
+
     await IncidentFeedService.createIncidentFeedItem({
       incidentId: createdItem.incidentId!,
       projectId: createdItem.projectId!,
@@ -499,11 +505,10 @@ export class Service extends DatabaseService<IncidentStateTimeline> {
         "**",
       moreInformationInMarkdown: `**Cause:**
 ${createdItem.rootCause}`,
-      userId: createdItem.createdByUserId || onCreate.createBy.props.userId,
+      userId: stateChangedByUserId,
       workspaceNotification: {
-        sendWorkspaceNotification: true,
-        notifyUserId:
-          createdItem.createdByUserId || onCreate.createBy.props.userId,
+        sendWorkspaceNotification: !isManualAction,
+        notifyUserId: stateChangedByUserId,
       },
     });
 
