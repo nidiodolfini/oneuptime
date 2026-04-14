@@ -17,6 +17,21 @@ const toHexId = (value: unknown): string => {
     return "";
   }
   if (typeof value === "string") {
+    // Backend sometimes JSON-serializes Buffer objects before the SPA gets
+    // them, so the field arrives as a literal string like
+    // `'{"type":"Buffer","data":[...]}'`. Detect that shape and recurse.
+    const trimmed: string = value.trim();
+    if (
+      trimmed.startsWith('{"type":"Buffer"') ||
+      trimmed.startsWith('{"data":')
+    ) {
+      try {
+        const parsed: unknown = JSON.parse(trimmed);
+        return toHexId(parsed);
+      } catch {
+        // fall through and return raw string
+      }
+    }
     return value;
   }
   if (typeof value === "object") {
