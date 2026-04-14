@@ -14,7 +14,8 @@ import PageLoader from "Common/UI/Components/Loader/PageLoader";
 import ErrorMessage from "Common/UI/Components/ErrorMessage/ErrorMessage";
 import SortOrder from "Common/Types/BaseDatabase/SortOrder";
 import ListResult from "Common/Types/BaseDatabase/ListResult";
-import { LIMIT_PER_PROJECT } from "Common/Types/Database/LimitMax";
+// LIMIT_PER_PROJECT removed — was 10000, causing N+1 query explosion on dashboards
+// with many services. Use reasonable limits per use case instead.
 import ObjectID from "Common/Types/ObjectID";
 import OneUptimeDate from "Common/Types/Date";
 import TelemetryServiceElement from "../TelemetryService/TelemetryServiceElement";
@@ -149,7 +150,7 @@ const ExceptionsDashboard: FunctionComponent = (): ReactElement => {
             serviceColor: true,
             name: true,
           },
-          limit: LIMIT_PER_PROJECT,
+          limit: 50,
           skip: 0,
           sort: {
             name: SortOrder.Ascending,
@@ -165,12 +166,11 @@ const ExceptionsDashboard: FunctionComponent = (): ReactElement => {
 
       const loadedServices: Array<Service> = servicesResult.data || [];
 
-      // Load unresolved exception counts per service
-      const serviceExceptionCounts: Array<ServiceExceptionSummary> = [];
-
-      for (const service of loadedServices) {
-        const serviceExceptions: ListResult<TelemetryException> =
-          await ModelAPI.getList({
+      // Load unresolved exception counts per service — in parallel, not sequentially.
+      // Uses limit: 500 instead of LIMIT_PER_PROJECT (10000) to keep payload reasonable.
+      const serviceExceptionPromises: Array<Promise<ListResult<TelemetryException>>> =
+        loadedServices.map((service: Service) => {
+          return ModelAPI.getList({
             modelType: TelemetryException,
             query: {
               projectId,
@@ -181,15 +181,23 @@ const ExceptionsDashboard: FunctionComponent = (): ReactElement => {
             select: {
               occuranceCount: true,
             },
-            limit: LIMIT_PER_PROJECT,
+            limit: 500,
             skip: 0,
             sort: {
               occuranceCount: SortOrder.Descending,
             },
           });
+        });
 
+      const serviceExceptionResults: Array<ListResult<TelemetryException>> =
+        await Promise.all(serviceExceptionPromises);
+
+      const serviceExceptionCounts: Array<ServiceExceptionSummary> = [];
+
+      for (let i: number = 0; i < loadedServices.length; i++) {
+        const service: Service = loadedServices[i]!;
         const exceptions: Array<TelemetryException> =
-          serviceExceptions.data || [];
+          serviceExceptionResults[i]?.data || [];
 
         if (exceptions.length > 0) {
           let totalOccurrences: number = 0;
