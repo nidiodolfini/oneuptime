@@ -24,6 +24,7 @@ import RouteMap, { RouteUtil } from "../../Utils/RouteMap";
 import PageMap from "../../Utils/PageMap";
 import Route from "Common/Types/API/Route";
 import AppLink from "../AppLink/AppLink";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 
 interface ServiceTraceSummary {
   service: Service;
@@ -169,7 +170,7 @@ const TracesDashboard: FunctionComponent = (): ReactElement => {
 
       for (const span of allSpans) {
         const serviceId: string = span.serviceId?.toString() || "";
-        const traceId: string = span.traceId?.toString() || "";
+        const traceId: string = toHexId(span.traceId);
         const duration: number = (span.durationUnixNano as number) || 0;
         const summary: ServiceTraceSummary | undefined =
           summaryMap.get(serviceId);
