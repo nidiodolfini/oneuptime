@@ -167,6 +167,8 @@ export class Service extends ProjectReferencesService<Model> {
           "#" + incidentNumberResult.number;
 
         if (user && user.name) {
+          // Suppress Slack notification when a user manually removed a member via UI/API.
+          const isManualAction: boolean = Boolean(deleteByUserId);
           await IncidentFeedService.createIncidentFeedItem({
             incidentId: incidentId,
             projectId: projectId,
@@ -176,7 +178,7 @@ export class Service extends ProjectReferencesService<Model> {
               mdText`👤 Removed **${user.name.toString()}** (${user.email?.toString()}) as **${roleName}** from [Incident ${incidentNumberDisplay}](${(await IncidentService.getIncidentLinkInDashboard(projectId!, incidentId!)).toString()}).`.toString(),
             userId: deleteByUserId || undefined,
             workspaceNotification: {
-              sendWorkspaceNotification: true,
+              sendWorkspaceNotification: !isManualAction,
               notifyUserId: userId || undefined,
             },
           });
@@ -229,6 +231,9 @@ export class Service extends ProjectReferencesService<Model> {
         "#" + incidentNumberResult.number;
 
       if (userId) {
+        // Suppress Slack notification when a user manually added a member via UI/API.
+        // Feed item is still created (visible in OneUptime UI) but not posted to Slack to reduce noise.
+        const isManualAction: boolean = Boolean(createdByUserId);
         await IncidentFeedService.createIncidentFeedItem({
           incidentId: incidentId,
           projectId: projectId,
@@ -241,7 +246,7 @@ export class Service extends ProjectReferencesService<Model> {
             })}** as **${roleName}** to [Incident ${incidentNumberDisplay}](${(await IncidentService.getIncidentLinkInDashboard(projectId!, incidentId!)).toString()}).`.toString(),
           userId: createdByUserId || undefined,
           workspaceNotification: {
-            sendWorkspaceNotification: true,
+            sendWorkspaceNotification: !isManualAction,
             notifyUserId: userId || undefined,
           },
         });
