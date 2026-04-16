@@ -24,6 +24,7 @@ import { APP_API_URL } from "../../../Config";
 import HTTPResponse from "../../../../Types/API/HTTPResponse";
 import HTTPErrorResponse from "../../../../Types/API/HTTPErrorResponse";
 import ObjectID from "../../../../Types/ObjectID";
+import toHexId from "../../../Utils/Telemetry/TraceIdHex";
 
 type LogDetailTab = "details" | "context";
 
@@ -169,8 +170,8 @@ const LogDetailsPanel: FunctionComponent<LogDetailsPanelProps> = (
     return JSON.stringify(flat, null, 2);
   }, [attributeEntries]);
 
-  const traceId: string = props.log.traceId?.toString() || "";
-  const spanId: string = props.log.spanId?.toString() || "";
+  const traceId: string = toHexId(props.log.traceId);
+  const spanId: string = toHexId(props.log.spanId);
 
   const traceRoute: Route | URL | undefined = useMemo(() => {
     if (!traceId || !props.getTraceRoute) {

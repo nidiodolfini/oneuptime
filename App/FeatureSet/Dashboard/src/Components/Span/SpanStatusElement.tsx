@@ -5,6 +5,7 @@ import { SpanStatus } from "Common/Models/AnalyticsModels/Span";
 import React, { FunctionComponent, ReactElement } from "react";
 import RouteMap, { RouteUtil } from "../../Utils/RouteMap";
 import PageMap from "../../Utils/PageMap";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 
 export interface ComponentProps {
   spanStatusCode: SpanStatus;
@@ -42,7 +43,7 @@ const SpanStatusElement: FunctionComponent<ComponentProps> = (
         <div className={`${props.titleClassName} hover:underline`}>
           <AppLink
             to={RouteUtil.populateRouteParams(RouteMap[PageMap.TRACE_VIEW]!, {
-              modelId: props.traceId,
+              modelId: toHexId(props.traceId),
             })}
           >
             <p>{props.title}</p>
