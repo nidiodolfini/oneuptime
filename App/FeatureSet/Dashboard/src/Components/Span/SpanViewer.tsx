@@ -38,6 +38,7 @@ import ExceptionInstance from "Common/Models/AnalyticsModels/ExceptionInstance";
 import RouteMap, { RouteUtil } from "../../Utils/RouteMap";
 import PageMap from "../../Utils/PageMap";
 import Route from "Common/Types/API/Route";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 import Link from "Common/UI/Components/Link/Link";
 import Navigation from "Common/UI/Utils/Navigation";
 import CriticalPathUtil, {
@@ -248,7 +249,7 @@ const SpanViewer: FunctionComponent<ComponentProps> = (
           });
         }}
         getSpanRoute={(spanId: string, log: Log) => {
-          const traceId: string | undefined = log.traceId?.toString();
+          const traceId: string = toHexId(log.traceId);
 
           if (!spanId || !traceId) {
             return undefined;
@@ -699,7 +700,7 @@ const SpanViewer: FunctionComponent<ComponentProps> = (
               return (
                 <div>
                   <SpanStatusElement
-                    traceId={span.traceId?.toString()}
+                    traceId={toHexId(span.traceId)}
                     spanStatusCode={span.statusCode!}
                     title={
                       "Status: " +
