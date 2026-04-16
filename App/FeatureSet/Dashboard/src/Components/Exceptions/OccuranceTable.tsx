@@ -6,6 +6,7 @@ import AnalyticsModelTable from "Common/UI/Components/ModelTable/AnalyticsModelT
 import FieldType from "Common/UI/Components/Types/FieldType";
 import React, { Fragment, FunctionComponent, ReactElement } from "react";
 import TraceElement from "../Traces/TraceElement";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 
 export interface ComponentProps {
   exceptionFingerprint: string;
@@ -102,9 +103,9 @@ const OccouranceTable: FunctionComponent<ComponentProps> = (
                 return (
                   <Fragment>
                     <SpanStatusElement
-                      traceId={exceptionInstance.traceId?.toString()}
+                      traceId={toHexId(exceptionInstance.traceId)}
                       spanStatusCode={exceptionInstance.spanStatusCode!}
-                      title={exceptionInstance.spanId?.toString()}
+                      title={toHexId(exceptionInstance.spanId)}
                     />
                   </Fragment>
                 );
@@ -122,7 +123,7 @@ const OccouranceTable: FunctionComponent<ComponentProps> = (
                 return (
                   <Fragment>
                     <TraceElement
-                      traceId={exceptionInstance.traceId?.toString()}
+                      traceId={toHexId(exceptionInstance.traceId)}
                     />
                   </Fragment>
                 );

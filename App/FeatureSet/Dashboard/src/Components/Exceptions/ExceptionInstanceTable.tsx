@@ -13,6 +13,7 @@ import React, {
 import TraceElement from "../Traces/TraceElement";
 import SpanStatusElement from "../Span/SpanStatusElement";
 import ObjectID from "Common/Types/ObjectID";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 
 export interface ComponentProps {
   title: string;
@@ -134,9 +135,9 @@ const ExceptionInstanceTable: FunctionComponent<ComponentProps> = (
 
             return (
               <SpanStatusElement
-                traceId={exceptionInstance.traceId?.toString()}
+                traceId={toHexId(exceptionInstance.traceId)}
                 spanStatusCode={exceptionInstance.spanStatusCode || 0}
-                title={exceptionInstance.spanId?.toString()}
+                title={toHexId(exceptionInstance.spanId)}
               />
             );
           },
@@ -153,7 +154,7 @@ const ExceptionInstanceTable: FunctionComponent<ComponentProps> = (
             }
 
             return (
-              <TraceElement traceId={exceptionInstance.traceId.toString()} />
+              <TraceElement traceId={toHexId(exceptionInstance.traceId)} />
             );
           },
         },
