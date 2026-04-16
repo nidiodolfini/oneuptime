@@ -15,6 +15,7 @@ import {
   isLogsAttributeColumnId,
   normalizeLogsTableColumns,
 } from "../types";
+import toHexId from "../../../Utils/Telemetry/TraceIdHex";
 
 export interface LogsTableProps {
   logs: Array<Log>;
@@ -244,8 +245,8 @@ const LogsTable: FunctionComponent<LogsTableProps> = (
                 "#94a3b8";
 
               const message: string = log.body?.toString() || "";
-              const traceId: string = log.traceId?.toString() || "";
-              const spanId: string = log.spanId?.toString() || "";
+              const traceId: string = toHexId(log.traceId);
+              const spanId: string = toHexId(log.spanId);
 
               const isSelected: boolean = props.selectedLogId === rowId;
               const isFocused: boolean = props.focusedRowIndex === index;
