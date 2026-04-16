@@ -48,6 +48,7 @@ import RouteMap, { RouteUtil } from "../../Utils/RouteMap";
 import PageMap from "../../Utils/PageMap";
 import Route from "Common/Types/API/Route";
 import URL from "Common/Types/API/URL";
+import toHexId from "Common/UI/Utils/Telemetry/TraceIdHex";
 import HTTPResponse from "Common/Types/API/HTTPResponse";
 import HTTPErrorResponse from "Common/Types/API/HTTPErrorResponse";
 import { JSONObject } from "Common/Types/JSON";
@@ -1026,7 +1027,7 @@ const DashboardLogsViewer: FunctionComponent<ComponentProps> = (
 
   const getSpanRoute: (spanId: string, log: Log) => Route | URL | undefined =
     useCallback((spanId: string, log: Log): Route | URL | undefined => {
-      const traceId: string | undefined = log.traceId?.toString();
+      const traceId: string = toHexId(log.traceId);
 
       if (!spanId || !traceId) {
         return undefined;
