@@ -4,7 +4,6 @@ import {
   ExpressResponse,
   NextFunction,
 } from "Common/Server/Utils/Express";
-import Response from "Common/Server/Utils/Response";
 import CaptureSpan from "Common/Server/Utils/Telemetry/CaptureSpan";
 import BadRequestException from "Common/Types/Exception/BadRequestException";
 import { JSONObject } from "Common/Types/JSON";
@@ -133,8 +132,14 @@ export default class PyroscopeIngestService {
       // Set the converted body on the request for the queue processor
       req.body = otlpBody;
 
-      // Respond immediately and queue for async processing
-      Response.sendEmptySuccessResponse(req, res);
+      // Respond immediately and queue for async processing.
+      // Connect-RPC clients (Alloy fan-out) validate response Content-Type and
+      // reject application/json. sendEmptySuccessResponse serializes {} via
+      // res.send which forces application/json; emit application/proto + 200
+      // explicitly. See ADR upstream + Medgrupo project_profiles_fanout_blocked
+      // memory (2026-05-13).
+      res.setHeader("Content-Type", "application/proto");
+      res.status(200).end();
 
       await ProfilesQueueService.addProfileIngestJob(req as TelemetryRequest);
     } catch (err) {
@@ -245,16 +250,20 @@ export default class PyroscopeIngestService {
       }
 
       if (allResourceProfiles.length === 0) {
-        // No valid profiles found — still respond OK
-        Response.sendEmptySuccessResponse(req, res);
+        // No valid profiles found — still respond OK.
+        // Connect-RPC requires application/proto on the response.
+        res.setHeader("Content-Type", "application/proto");
+        res.status(200).end();
         return;
       }
 
       // Set the merged OTLP body on the request for the queue processor
       req.body = { resourceProfiles: allResourceProfiles };
 
-      // Respond immediately and queue for async processing
-      Response.sendEmptySuccessResponse(req, res);
+      // Respond immediately and queue for async processing.
+      // Connect-RPC requires application/proto on the response.
+      res.setHeader("Content-Type", "application/proto");
+      res.status(200).end();
 
       await ProfilesQueueService.addProfileIngestJob(req as TelemetryRequest);
     } catch (err) {

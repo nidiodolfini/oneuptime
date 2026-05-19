@@ -134,7 +134,17 @@ app.use((req: ExpressRequest, _res: ExpressResponse, next: NextFunction) => {
  * payloads in the telemetry router to avoid conflicts with the merged app stack.
  */
 const protobufBodyParserMiddleware: RequestHandler = ExpressRaw({
-  type: ["application/x-protobuf", "application/protobuf"],
+  type: [
+    "application/x-protobuf",
+    "application/protobuf",
+    // Connect-RPC clients (Alloy fan-out OTLP profiles) send these MIME types
+    // for unary and streaming requests. Without them the raw body parser
+    // skips the request, downstream handlers see an empty payload, and the
+    // ingest path returns a 200 with no work done. See Medgrupo memory
+    // project_profiles_fanout_blocked_2026-05-13.
+    "application/proto",
+    "application/connect+proto",
+  ],
   limit: "50mb",
 });
 
