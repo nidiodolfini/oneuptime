@@ -4,7 +4,6 @@ import {
   ExpressResponse,
   NextFunction,
 } from "Common/Server/Utils/Express";
-import Response from "Common/Server/Utils/Response";
 import CaptureSpan from "Common/Server/Utils/Telemetry/CaptureSpan";
 import EventLoop from "Common/Server/Utils/EventLoop";
 import logger from "Common/Server/Utils/Logger";
@@ -229,8 +228,14 @@ export default class PyroscopeIngestService {
         (req as TelemetryRequest).productType = ProductType.Profiles;
       }
 
-      // Respond immediately and queue for async processing
-      Response.sendEmptySuccessResponse(req, res);
+      // Respond immediately and queue for async processing.
+      // Connect-RPC clients (Alloy fan-out) validate response Content-Type and
+      // reject application/json. sendEmptySuccessResponse serializes {} via
+      // res.send which forces application/json; emit application/proto + 200
+      // explicitly. See ADR upstream + Medgrupo project_profiles_fanout_blocked
+      // memory (2026-05-13).
+      res.setHeader("Content-Type", "application/proto");
+      res.status(200).end();
 
       try {
         await ProfilesQueueService.addProfileIngestJob(req as TelemetryRequest);
@@ -362,8 +367,10 @@ export default class PyroscopeIngestService {
       }
 
       if (allResourceProfiles.length === 0) {
-        // No valid profiles found — still respond OK
-        Response.sendEmptySuccessResponse(req, res);
+        // No valid profiles found — still respond OK.
+        // Connect-RPC requires application/proto on the response.
+        res.setHeader("Content-Type", "application/proto");
+        res.status(200).end();
         return;
       }
 
@@ -379,8 +386,10 @@ export default class PyroscopeIngestService {
         (req as TelemetryRequest).productType = ProductType.Profiles;
       }
 
-      // Respond immediately and queue for async processing
-      Response.sendEmptySuccessResponse(req, res);
+      // Respond immediately and queue for async processing.
+      // Connect-RPC requires application/proto on the response.
+      res.setHeader("Content-Type", "application/proto");
+      res.status(200).end();
 
       try {
         await ProfilesQueueService.addProfileIngestJob(req as TelemetryRequest);
