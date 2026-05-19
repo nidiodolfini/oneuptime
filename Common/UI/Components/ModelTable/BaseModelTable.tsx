@@ -70,7 +70,6 @@ import SubscriptionPlan, {
   PlanType,
 } from "../../../Types/Billing/SubscriptionPlan";
 import { Yellow } from "../../../Types/BrandColors";
-import { LIMIT_PER_PROJECT } from "../../../Types/Database/LimitMax";
 import Dictionary from "../../../Types/Dictionary";
 import BadDataException from "../../../Types/Exception/BadDataException";
 import Color from "../../../Types/Color";
