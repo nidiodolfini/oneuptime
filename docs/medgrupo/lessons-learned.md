@@ -477,3 +477,17 @@ ArgoCD rolled out em 3 réplicas via rolling update (`maxUnavailable: 0, maxSurg
 - **[OneUptime/oneuptime#2397](https://github.com/OneUptime/oneuptime/pull/2397)** — `fix(metrics): drop non-finite numeric values when parsing OTLP strings`
 
 Quando todos merged + release nova disponível, voltar `values.yaml` pra imagem oficial `ghcr.io/oneuptime/app:10.0.5X`.
+
+---
+
+## 2026-07-07 — Slack section block >3000 chars: mensagens somem silenciosamente (`invalid_blocks`)
+
+**Sintoma em produção (Medgrupo)**: mensagens "Incident Created" (as únicas com os action buttons) e os espelhos de private notes de ~3000 chars pararam de aparecer no Slack; state-changed e notas curtas continuavam chegando. Incidents INC-459/460 (description 3361 chars, enrichment do Robusta) vs INC-457 (267 chars) provaram a correlação com tamanho.
+
+**Causa raiz**: `IncidentService.createIncidentFeedAsync` embute a description crua no markdown do feed; `WorkspaceUtil.getMessageBlocksByMarkdown` gerava UM `WorkspacePayloadMarkdown` sem split e `SlackUtil.getMarkdownBlock` não trunca. O Slack rejeita section block com text >3000 chars: HTTP **200** com `ok:false, error:"invalid_blocks"` → sem retry do axios (`API.post` só re-tenta em throw); o catch por canal em `SlackUtil.sendMessage` faz `logger.error` e descarta. `WorkspaceNotificationLog` só grava sucesso — falha não deixa rastro no DB.
+
+**Fix (tag `11.0.3-medgrupo.2`)**:
+- `1a35268a18` — split em chunks ≤2800 no `getMessageBlocksByMarkdown` (fronteira de parágrafo; botões via `appendMessageBlocks` seguem na mesma mensagem; batching de 50 blocks já existia) + truncamento defensivo a 3000 no `getMarkdownBlock` (cobre call-sites que montam payload direto). **Upstream-worthy** — draft em `upstream-prs-draft.md`.
+- `4112e03221` — suprime a workspace notification da entrada de timeline do estado INICIAL (`isCreatedState`): toda criação gerava um "Changed State to Identificado" redundante logo após o "Incident Created". Coerente com `11f7d339d9` (suppress manual actions). Feed in-app continua registrando; Resolvido/Reconhecido seguem notificando. **Patch local Medgrupo** (comportamento opinativo, não candidato a upstream sem feature flag).
+
+**Como diagnosticar de fora**: comparar `descLen` dos incidents via API (`POST /api/incident/get-list`, select `description`) entre um que postou e um que não postou; logs do deployment `oneuptime` com `grep -iE "invalid_blocks|Error from Slack|Error sending message to channel"` (atenção: o ruído de telemetria/ClickHouse afoga o grep — filtrar antes).
