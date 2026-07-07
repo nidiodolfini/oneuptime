@@ -162,7 +162,11 @@ export class Service extends DatabaseService<Model> {
 ${(createdItem.note || "") + attachmentsMarkdown}
           `,
       workspaceNotification: {
-        sendWorkspaceNotification: true,
+        // Medgrupo: private notes live in the incident only — no Slack
+        // mirror. The channel keeps Incident Created (buttons) and state
+        // changes; analysis/occurrence notes were duplicating the Robusta
+        // technical message and flooding the channel.
+        sendWorkspaceNotification: false,
         notifyUserId: userId || undefined,
       },
     });
@@ -221,7 +225,9 @@ ${(createdItem.note || "") + attachmentsMarkdown}
 ${(updatedItem.note || "") + attachmentsMarkdown}
           `,
           workspaceNotification: {
-            sendWorkspaceNotification: true,
+            // Medgrupo: same as creation — no Slack mirror for
+            // private-note updates.
+            sendWorkspaceNotification: false,
             notifyUserId: userId || undefined,
           },
         });
