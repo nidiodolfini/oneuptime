@@ -192,3 +192,31 @@ This applies transparently to every numeric field that flows through `toNumberOr
 ## Related
 
 This is one of several race/parsing fixes applied on top of OneUptime 10.0.55 for a production deployment. See also: PRs for probe-ingest stalled-job orphans and service creation race condition.
+
+---
+
+## PR #6 — `fix(slack): keep markdown blocks within Slack 3000-char section limit`
+
+Commit SHA no fork (branch de tag `medgrupo/11.0.3-fixes`): `1a35268a18`. Para o PR upstream, cherry-pick sobre `master` (branch `fix/slack-3000-char-section-limit`).
+
+**Body sugerido**:
+
+## Summary
+
+Slack rejects any `section` block whose `text.text` exceeds 3000 characters with `ok: false, error: "invalid_blocks"`. Because Slack returns HTTP 200, the axios retry path never triggers, and the per-channel catch in `SlackUtil.sendMessage` logs and swallows the error — the whole message, action buttons included, silently disappears. Incident-created messages with long descriptions (e.g. auto-created incidents fed by alerting pipelines) and private-note mirrors of ~3000-char notes never reach the channel, while short state-change messages keep posting. `WorkspaceNotificationLog` only records successes, so there is no trace in the DB either.
+
+## Root cause
+
+`WorkspaceUtil.getMessageBlocksByMarkdown` wraps the whole markdown (incident description included) in a single `WorkspacePayloadMarkdown`, and `SlackUtil.getMarkdownBlock` converts it to one `section` block with no length handling. The existing batching in `SlackUtil.sendMessage` only splits messages at 50 *blocks*; a single oversized block sails through untouched and poisons the whole `chat.postMessage` payload.
+
+## Change
+
+Two defensive layers:
+
+1. `WorkspaceUtil.getMessageBlocksByMarkdown` splits the markdown into chunks of <=2800 characters (paragraph-boundary preferred, hard cut for giant paragraphs) BEFORE block generation, producing N markdown blocks. Blocks appended later (action buttons) stay on the same message, and the existing 50-block batching still applies. 2800 leaves headroom for `SlackifyMarkdown` transforms.
+2. `SlackUtil.getMarkdownBlock` truncates at 3000 characters post-`SlackifyMarkdown` as a safety net for call sites that build `WorkspacePayloadMarkdown` directly.
+
+## Test plan
+
+- [x] Production deployment (self-hosted 11.0.3 + patch): incident auto-created with 3361-char description now posts the created-message with buttons (2 sections); ~3000-char private notes mirror to the channel; zero `invalid_blocks` in logs.
+- [ ] Unit test for the chunking helper (boundary: empty, exactly limit, giant paragraph, multi-paragraph).
