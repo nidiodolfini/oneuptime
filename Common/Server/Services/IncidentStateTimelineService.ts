@@ -493,6 +493,13 @@ export class Service extends DatabaseService<IncidentStateTimeline> {
       createdItem.createdByUserId || onCreate.createBy.props.userId;
     const isManualAction: boolean = Boolean(stateChangedByUserId);
 
+    // Medgrupo: also suppress the workspace notification for the INITIAL
+    // state timeline entry (created state, e.g. "Identificado") — the
+    // "Incident Created" message already carries the state, so every new
+    // incident produced a redundant "Changed State to ..." in Slack.
+    // The in-app incident feed still records the entry.
+    const isInitialState: boolean = Boolean(incidentState?.isCreatedState);
+
     await IncidentFeedService.createIncidentFeedItem({
       incidentId: createdItem.incidentId!,
       projectId: createdItem.projectId!,
@@ -507,7 +514,7 @@ export class Service extends DatabaseService<IncidentStateTimeline> {
 ${createdItem.rootCause}`,
       userId: stateChangedByUserId,
       workspaceNotification: {
-        sendWorkspaceNotification: !isManualAction,
+        sendWorkspaceNotification: !isManualAction && !isInitialState,
         notifyUserId: stateChangedByUserId,
       },
     });
