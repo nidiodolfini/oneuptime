@@ -1979,13 +1979,25 @@ export default class SlackUtil extends WorkspaceBase {
     logger.debug("Getting markdown block with data:", {} as LogAttributes);
     logger.debug(data, {} as LogAttributes);
 
+    // Slack hard limit: 3000 chars per section block text. Anything longer
+    // makes the API reject the WHOLE message with "invalid_blocks" (and the
+    // caller drops it silently). Defensive truncation for call sites that
+    // build markdown payloads directly without pre-splitting.
+    const SLACK_SECTION_TEXT_LIMIT: number = 3000;
+
+    let text: string = data.payloadMarkdownBlock.text
+      ? SlackifyMarkdown(data.payloadMarkdownBlock.text)
+      : "";
+
+    if (text.length > SLACK_SECTION_TEXT_LIMIT) {
+      text = text.slice(0, SLACK_SECTION_TEXT_LIMIT - 4) + " ...";
+    }
+
     const markdownBlock: JSONObject = {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: data.payloadMarkdownBlock.text
-          ? SlackifyMarkdown(data.payloadMarkdownBlock.text)
-          : "",
+        text: text,
       },
     };
 

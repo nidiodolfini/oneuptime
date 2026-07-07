@@ -92,18 +92,73 @@ export default class WorkspaceUtil {
         }
       }
 
+      const markdownChunks: Array<string> = this.splitMarkdownIntoChunks(
+        data.markdown,
+        2800,
+      );
+
       messageBlocksByWorkspaceType.push({
         workspaceType: workspaceType,
-        messageBlocks: [
-          {
-            _type: "WorkspacePayloadMarkdown",
-            text: userStringToAppend + data.markdown,
-          } as WorkspacePayloadMarkdown,
-        ],
+        messageBlocks: markdownChunks.map(
+          (chunk: string, index: number): WorkspacePayloadMarkdown => {
+            return {
+              _type: "WorkspacePayloadMarkdown",
+              text: index === 0 ? userStringToAppend + chunk : chunk,
+            } as WorkspacePayloadMarkdown;
+          },
+        ),
       });
     }
 
     return messageBlocksByWorkspaceType;
+  }
+
+  // Slack rejects any section block whose text exceeds 3000 characters with
+  // "invalid_blocks", dropping the WHOLE message (incident-created messages
+  // with long descriptions silently disappeared from channels). Split the
+  // markdown into chunks BEFORE block generation; 2800 leaves margin for the
+  // transforms applied later by SlackifyMarkdown. Multiple blocks are
+  // re-batched into messages of up to 50 blocks by the Slack util.
+  public static splitMarkdownIntoChunks(
+    markdown: string,
+    maxChars: number,
+  ): Array<string> {
+    const text: string = (markdown || "").trim();
+
+    if (text.length <= maxChars) {
+      return [text];
+    }
+
+    const chunks: Array<string> = [];
+    let current: string = "";
+
+    for (let paragraph of text.split("\n\n")) {
+      while (paragraph.length > maxChars) {
+        if (current) {
+          chunks.push(current);
+          current = "";
+        }
+        chunks.push(paragraph.slice(0, maxChars));
+        paragraph = paragraph.slice(maxChars);
+      }
+
+      const candidate: string = current
+        ? `${current}\n\n${paragraph}`
+        : paragraph;
+
+      if (candidate.length > maxChars) {
+        chunks.push(current);
+        current = paragraph;
+      } else {
+        current = candidate;
+      }
+    }
+
+    if (current) {
+      chunks.push(current);
+    }
+
+    return chunks;
   }
 
   @CaptureSpan()
