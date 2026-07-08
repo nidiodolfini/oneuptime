@@ -154,21 +154,42 @@ const EditionLabel: FunctionComponent<ComponentProps> = (
   }, [globalConfig?.enterpriseLicenseExpiresAt]);
 
   const editionName: string = useMemo(() => {
-    // Medgrupo fork: badge de marca no rodape. Esconde o nag
-    // "Enterprise Edition (License Required)" (rodamos com IS_ENTERPRISE_EDITION=true
-    // p/ liberar SSO/OIDC, sem licenca comercial — Apache 2.0). So cosmetico.
-    return "Medgrupo";
-  }, []);
+    if (!IS_ENTERPRISE_EDITION) {
+      return "Community Edition";
+    }
+
+    if (isConfigLoading) {
+      return "Enterprise Edition (Checking...)";
+    }
+
+    return licenseValid
+      ? "Enterprise Edition"
+      : "Enterprise Edition (License Required)";
+  }, [isConfigLoading, licenseValid]);
 
   const indicatorColor: string = useMemo(() => {
-    // Medgrupo fork: cor de marca fixa (sem o ponto vermelho de "license required").
-    return "bg-indigo-400";
-  }, []);
+    if (!IS_ENTERPRISE_EDITION) {
+      return "bg-indigo-400";
+    }
+
+    if (isConfigLoading) {
+      return "bg-yellow-400";
+    }
+
+    return licenseValid ? "bg-emerald-500" : "bg-red-500";
+  }, [isConfigLoading, licenseValid]);
 
   const ctaLabel: string = useMemo(() => {
-    // Medgrupo fork: sem CTA de licenca ("Validate license") no rodape.
-    return "";
-  }, []);
+    if (!IS_ENTERPRISE_EDITION) {
+      return "Learn more";
+    }
+
+    if (isConfigLoading) {
+      return "Checking";
+    }
+
+    return licenseValid ? "View details" : "Validate license";
+  }, [isConfigLoading, licenseValid]);
 
   const communityFeatures: Array<string> = useMemo(() => {
     return [
