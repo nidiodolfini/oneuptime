@@ -381,8 +381,20 @@ const LoginPage: () => JSX.Element = () => {
               }}
               maxPrimaryButtonWidth={true}
               footer={
-                <div className="actions text-center mt-4 hover:underline fw-semibold">
-                  <div>
+                <div className="actions text-center mt-4">
+                  {/* Medgrupo fork: botao de login DIRETO via Keycloak (projeto Medgrupo).
+                      <a href> (nao <Link>) pois /identity/oidc/* e rota de servidor do
+                      OneUptime que redireciona ao Keycloak, sem a tela de e-mail.
+                      IDs = config OIDC do projeto Medgrupo; se a config for recriada,
+                      atualizar projectId/projectOidcId abaixo. Ver docs/oneuptime-sso-keycloak.md. */}
+                  <a
+                    href="/identity/oidc/933778d7-66a2-4e4b-bdfc-35220c4ce4d6/16f70277-9d28-47be-8871-e70ac10058d3"
+                    data-testid="login-with-keycloak"
+                    className="flex w-full justify-center items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                  >
+                    Login com Keycloak
+                  </a>
+                  <div className="mt-3 hover:underline fw-semibold">
                     <Link to={new Route("/accounts/sso")}>
                       <div className="text-indigo-500 hover:text-indigo-900 cursor-pointer text-sm">
                         Use single sign-on (SSO) instead
