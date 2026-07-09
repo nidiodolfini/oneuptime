@@ -105,6 +105,11 @@ export const BillingPublicKey: string = BillingConfig.BillingPublicKey;
 export const BillingPrivateKey: string = BillingConfig.BillingPrivateKey;
 export const BillingWebhookSecret: string = BillingConfig.BillingWebhookSecret;
 
+// Medgrupo: lista CSV de projectIds que TODO usuario SSO/OIDC deve enxergar
+// (o login adiciona o usuario ao time "Members" de cada um). Vazio = desativado.
+export const SSODefaultProjectIds: string =
+  process.env["SSO_DEFAULT_PROJECT_IDS"] || "";
+
 export const DatabaseHost: Hostname = Hostname.fromString(
   process.env["DATABASE_HOST"] || "postgres",
 );
