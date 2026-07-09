@@ -15,10 +15,15 @@ import { JSONObject } from "Common/Types/JSON";
 import ObjectID from "Common/Types/ObjectID";
 import PositiveNumber from "Common/Types/PositiveNumber";
 import DatabaseConfig from "Common/Server/DatabaseConfig";
-import { Host, HttpProtocol } from "Common/Server/EnvironmentConfig";
+import {
+  Host,
+  HttpProtocol,
+  SSODefaultProjectIds,
+} from "Common/Server/EnvironmentConfig";
 import AccessTokenService from "Common/Server/Services/AccessTokenService";
 import ProjectSSOService from "Common/Server/Services/ProjectSsoService";
 import TeamMemberService from "Common/Server/Services/TeamMemberService";
+import TeamService from "Common/Server/Services/TeamService";
 import UserService from "Common/Server/Services/UserService";
 import UserSessionService, {
   SessionMetadata,
@@ -43,6 +48,7 @@ import logger, {
 import Response from "Common/Server/Utils/Response";
 import Project from "Common/Models/DatabaseModels/Project";
 import ProjectSSO from "Common/Models/DatabaseModels/ProjectSso";
+import Team from "Common/Models/DatabaseModels/Team";
 import TeamMember from "Common/Models/DatabaseModels/TeamMember";
 import User from "Common/Models/DatabaseModels/User";
 import xml2js from "xml2js";
@@ -507,6 +513,7 @@ const loginUserWithSso: LoginUserWithSsoFunction = async (
       query: {
         projectId: new ObjectID(req.params["projectId"] as string),
         userId: alreadySavedUser!.id!,
+        hasAcceptedInvitation: true,
       },
       props: {
         isRoot: true,
@@ -546,6 +553,57 @@ const loginUserWithSso: LoginUserWithSsoFunction = async (
           },
         });
       }
+    }
+
+    // Medgrupo: garante que todo usuario SSO veja os projetos default
+    // (SSO_DEFAULT_PROJECT_IDS), nao so o projeto do link usado. Idempotente:
+    // roda em todo login, so cria a membership que falta (time "Members").
+    for (const rawProjectId of SSODefaultProjectIds.split(",")) {
+      const trimmedProjectId: string = rawProjectId.trim();
+      if (trimmedProjectId.length === 0) {
+        continue;
+      }
+
+      const defaultProjectId: ObjectID = new ObjectID(trimmedProjectId);
+
+      const existingMembership: PositiveNumber =
+        await TeamMemberService.countBy({
+          query: {
+            projectId: defaultProjectId,
+            userId: alreadySavedUser.id!,
+            hasAcceptedInvitation: true,
+          },
+          props: { isRoot: true },
+        });
+
+      if (existingMembership.toNumber() > 0) {
+        continue;
+      }
+
+      const membersTeam: Team | null = await TeamService.findOneBy({
+        query: {
+          projectId: defaultProjectId,
+          name: "Members",
+        },
+        select: { _id: true },
+        props: { isRoot: true },
+      });
+
+      if (!membersTeam) {
+        continue;
+      }
+
+      const defaultTeamMember: TeamMember = new TeamMember();
+      defaultTeamMember.projectId = defaultProjectId;
+      defaultTeamMember.userId = alreadySavedUser.id!;
+      defaultTeamMember.hasAcceptedInvitation = true;
+      defaultTeamMember.invitationAcceptedAt = OneUptimeDate.getCurrentDate();
+      defaultTeamMember.teamId = membersTeam.id!;
+
+      await TeamMemberService.create({
+        data: defaultTeamMember,
+        props: { isRoot: true, ignoreHooks: true },
+      });
     }
 
     const projectId: ObjectID = new ObjectID(req.params["projectId"] as string);
