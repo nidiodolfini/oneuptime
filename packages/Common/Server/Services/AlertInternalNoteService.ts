@@ -242,7 +242,11 @@ export class Service extends ProjectReferencesService<Model> {
 ${FeedMarkdown.asMarkdown(createdItem.note)}${attachmentsMarkdown}
                 `.toString(),
       workspaceNotification: {
-        sendWorkspaceNotification: true,
+        // Medgrupo: private notes live in the alert only — no Slack
+        // mirror. The channel keeps Alert Created (buttons) and state
+        // changes; dedup "+1 ocorrencia" notes were flooding the channel.
+        // Same patch as the Incident family (IncidentInternalNoteService).
+        sendWorkspaceNotification: false,
         // A saved message's entry names its people itself.
         leadWithAuthor: !saved,
         exceptChannel: SavedChatMessageNote.getSourceChannel({
@@ -307,7 +311,9 @@ ${FeedMarkdown.asMarkdown(createdItem.note)}${attachmentsMarkdown}
 ${FeedMarkdown.asMarkdown(updatedItem.note)}${attachmentsMarkdown}
                     `.toString(),
           workspaceNotification: {
-            sendWorkspaceNotification: true,
+            // Medgrupo: same as creation — no Slack mirror for
+            // private-note updates.
+            sendWorkspaceNotification: false,
             leadWithAuthor: true,
           },
         });
