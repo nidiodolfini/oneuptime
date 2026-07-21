@@ -336,7 +336,10 @@ RunCron(
         feedInfoInMarkdown: `🔔 **Owners have been notified about the state change of the [Alert ${alertDisplayNumber}](${(await AlertService.getAlertLinkInDashboard(projectId, alertId)).toString()}).**: Owners have been notified about the state change of the alert because the alert state changed to **${alertState.name}**.`,
         moreInformationInMarkdown: moreAlertFeedInformationInMarkdown,
         workspaceNotification: {
-          sendWorkspaceNotification: true,
+          // Medgrupo: align with the Incident family (upstream ships
+          // IncidentOwners/SendStateChangeNotification as false) — the real
+          // state-change message already posts; this meta mirror is noise.
+          sendWorkspaceNotification: false,
         },
       });
     }

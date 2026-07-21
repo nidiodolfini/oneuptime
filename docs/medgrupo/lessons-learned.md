@@ -507,3 +507,16 @@ Decisão de UX pós-validação: com os botões de volta, o espelho "posted priv
 - `AlertInternalNoteService.ts` — `sendWorkspaceNotification: false` na criação E atualização de private notes. Família `AlertEpisode` NÃO patchada (YAGNI — o bridge cria Alert direto).
 
 **⚠️ Gotcha de linhagem (a lição cara)**: as tags `.5`/`.6` (OIDC/identity) foram construídas sobre a `.1` e **não continham** os commits da branch `medgrupo/11.0.3-fixes` (`.2`/`.3` nunca viraram tag — eram só builds). A imagem `.6` em produção aparentava ter os patches porque o build é `docker build` local da ÁRVORE, não da tag. A `.7` reconcilia: branch `medgrupo/11.0.3-r7` = tag `.6` + cherry-pick de `11.0.3-medgrupo.1..medgrupo/11.0.3-fixes` (4 commits, zero conflito — arquivos disjuntos) + patches Alert. **Regra daqui pra frente: toda tag nova parte da tag anterior e traz a linha inteira; build sempre de árvore limpa em cima da tag.**
+
+### Adendo tag `.8` (2026-07-21) — owner-notification bells da família Alert
+
+Validação pós-.7 no `#devops-alerts` revelou ruído restante: msgs `:bell:` "Owner
+Alert Created Notification Sent" / "Owners have been notified about the state
+change" — vindas dos worker jobs `App/FeatureSet/Workers/Jobs/AlertOwners/`
+(`SendCreatedResourceNotification` e `SendStateChangeNotification`, ambos com
+`sendWorkspaceNotification: true`). O upstream JÁ envia os 3 jobs equivalentes de
+**IncidentOwners** como `false` (por isso o `#devops-incidentes` nunca teve bells) e
+o próprio `AlertOwners/SendNotePostedNotification` também é `false` — a família
+Alert simplesmente ficou atrás. Patch `.8` = flip dos 2 para `false` (alinhamento,
+não opinião). Notificações reais aos owners (e-mail/push) intocadas; feed in-app
+mantido.
