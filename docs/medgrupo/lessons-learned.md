@@ -495,3 +495,15 @@ Quando todos merged + release nova disponível, voltar `values.yaml` pra imagem 
 ### Adendo tag `.3` (2026-07-07, tarde) — notas internas sem espelho no Slack
 
 Decisão de UX pós-validação: com os botões de volta, o espelho "posted private note" duplicava a análise no canal (ela já vai inline na msg técnica do Robusta e vive no Incident). Patch: `IncidentInternalNoteService` com `sendWorkspaceNotification: false` na criação E atualização de private notes (TODAS — bot e humanas, decisão Sir Nídio). Canal fica: Robusta técnico + Incident Created (botões) + mudanças de estado. Public notes (status page) intocadas. Patch local Medgrupo (opinativo; upstream precisaria de flag por projeto). Complemento no bridge (gitops): fatiamento (parte i/N) revertido para nota única — sem espelho, o limite de 3000/section não se aplica a notas; o split/truncate do fork (tag .2) segue protegendo o resto.
+
+---
+
+## 2026-07-21 — tag `.7`: família Alert ganha as supressões de Slack + reconciliação da linhagem
+
+**Contexto (ADR 0027 do robusta-holmes)**: o tier warning virou OneUptime **Alert** (bridge F2/F3) e o shadow no `#devops-alerts` mostrou que a família Alert NÃO tinha os patches da família Incident: toda criação postava um "Changed State to ..." redundante (equivalente ao `.2`) e as notas de dedup "+1 ocorrencia" espelhavam no canal (equivalente ao `.3`). Pré-req do cutover F4 (Robusta deixa de postar warning; canal fica só com o Alert do OneUptime).
+
+**Patches (espelhos exatos dos de Incident)**:
+- `AlertStateTimelineService.ts` — `isInitialState = Boolean(alertState?.isCreatedState)` → `sendWorkspaceNotification: !isInitialState`. O "🚨 Alert Created" (`AlertService.ts`) já inclui o estado; Resolved/Acknowledged seguem notificando (auto-resolve visível = "auto-curou"). Obs.: a família Alert não tem o guard `isManualAction` do Incident (`11f7d339d9`) — só o inicial é suprimido.
+- `AlertInternalNoteService.ts` — `sendWorkspaceNotification: false` na criação E atualização de private notes. Família `AlertEpisode` NÃO patchada (YAGNI — o bridge cria Alert direto).
+
+**⚠️ Gotcha de linhagem (a lição cara)**: as tags `.5`/`.6` (OIDC/identity) foram construídas sobre a `.1` e **não continham** os commits da branch `medgrupo/11.0.3-fixes` (`.2`/`.3` nunca viraram tag — eram só builds). A imagem `.6` em produção aparentava ter os patches porque o build é `docker build` local da ÁRVORE, não da tag. A `.7` reconcilia: branch `medgrupo/11.0.3-r7` = tag `.6` + cherry-pick de `11.0.3-medgrupo.1..medgrupo/11.0.3-fixes` (4 commits, zero conflito — arquivos disjuntos) + patches Alert. **Regra daqui pra frente: toda tag nova parte da tag anterior e traz a linha inteira; build sempre de árvore limpa em cima da tag.**
