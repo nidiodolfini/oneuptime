@@ -419,6 +419,14 @@ export class Service extends DatabaseService<AlertStateTimeline> {
     const projectId: ObjectID = createdItem.projectId!;
     const alertId: ObjectID = createdItem.alertId!;
 
+    // Medgrupo: suppress the workspace notification for the INITIAL state
+    // timeline entry (created state) — the "Alert Created" message already
+    // carries the state, so every new alert produced a redundant
+    // "Changed State to ..." in Slack. Same patch as the Incident family
+    // (IncidentStateTimelineService). The in-app alert feed still records
+    // the entry.
+    const isInitialState: boolean = Boolean(alertState?.isCreatedState);
+
     await AlertFeedService.createAlertFeedItem({
       alertId: createdItem.alertId!,
       projectId: createdItem.projectId!,
@@ -433,7 +441,7 @@ export class Service extends DatabaseService<AlertStateTimeline> {
 ${createdItem.rootCause}`,
       userId: createdItem.createdByUserId || onCreate.createBy.props.userId,
       workspaceNotification: {
-        sendWorkspaceNotification: true,
+        sendWorkspaceNotification: !isInitialState,
         notifyUserId:
           createdItem.createdByUserId || onCreate.createBy.props.userId,
       },
