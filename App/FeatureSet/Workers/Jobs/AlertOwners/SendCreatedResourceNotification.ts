@@ -246,7 +246,11 @@ RunCron(
         feedInfoInMarkdown: alertFeedText,
         moreInformationInMarkdown: moreAlertFeedInformationInMarkdown,
         workspaceNotification: {
-          sendWorkspaceNotification: true,
+          // Medgrupo: align with the Incident family (upstream ships
+          // IncidentOwners/SendCreatedResourceNotification as false) — the
+          // channel already carries the real "Alert Created" message; this
+          // meta "owners were notified" mirror is noise. In-app feed kept.
+          sendWorkspaceNotification: false,
         },
       });
     }
