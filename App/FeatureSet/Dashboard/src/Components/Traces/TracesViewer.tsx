@@ -26,6 +26,7 @@ import Host from "Common/Models/DatabaseModels/Host";
 import DockerHost from "Common/Models/DatabaseModels/DockerHost";
 import PodmanHost from "Common/Models/DatabaseModels/PodmanHost";
 import KubernetesCluster from "Common/Models/DatabaseModels/KubernetesCluster";
+import RumApplication from "Common/Models/DatabaseModels/RumApplication";
 import AnalyticsModelAPI, {
   ListResult,
 } from "Common/UI/Utils/AnalyticsModelAPI/AnalyticsModelAPI";
@@ -381,6 +382,9 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
   const [error, setError] = useState<string>("");
 
   const [services, setServices] = useState<Array<Service>>([]);
+  const [rumApplications, setRumApplications] = useState<
+    Array<RumApplication>
+  >([]);
   const [hosts, setHosts] = useState<Array<Host>>([]);
   const [dockerHosts, setDockerHosts] = useState<Array<DockerHost>>([]);
   const [podmanHosts, setPodmanHosts] = useState<Array<PodmanHost>>([]);
@@ -473,7 +477,14 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
   const lastValueSuggestionKeyRef: React.MutableRefObject<string> =
     useRef<string>("");
 
-  // Service lookup map
+  /*
+   * Service lookup map. RUM spans (browser/mobile) carry
+   * primaryEntityId = RumApplication id — o ingest devolve serviceName null
+   * de proposito pra nao criar Service duplicada (OtelIngestBaseService.
+   * getServiceNameFromAttributes) — entao o mapa tambem indexa as
+   * RumApplications como pseudo-Service (so name; sem serviceColor) pra
+   * linha nao renderizar "unknown service".
+   */
   const serviceById: Record<string, Service> = useMemo(() => {
     const map: Record<string, Service> = {};
     for (const service of services) {
@@ -481,8 +492,15 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
         map[service.id.toString()] = service;
       }
     }
+    for (const rumApplication of rumApplications) {
+      if (rumApplication.id && !map[rumApplication.id.toString()]) {
+        const pseudoService: Service = new Service();
+        pseudoService.name = rumApplication.name;
+        map[rumApplication.id.toString()] = pseudoService;
+      }
+    }
     return map;
-  }, [services]);
+  }, [services, rumApplications]);
 
   /*
    * Parse search string — log syntax: field:value (no @) for known fields,
@@ -933,12 +951,14 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
         }
         const [
           serviceResult,
+          rumApplicationResult,
           hostResult,
           dockerHostResult,
           podmanHostResult,
           clusterResult,
         ]: [
           ModelListResult<Service>,
+          ModelListResult<RumApplication>,
           ModelListResult<Host>,
           ModelListResult<DockerHost>,
           ModelListResult<PodmanHost>,
@@ -950,6 +970,14 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
             limit: LIMIT_PER_PROJECT,
             skip: 0,
             select: { name: true, serviceColor: true },
+            sort: { name: SortOrder.Ascending },
+          }),
+          ModelAPI.getList({
+            modelType: RumApplication,
+            query: { projectId: projectId },
+            limit: LIMIT_PER_PROJECT,
+            skip: 0,
+            select: { name: true },
             sort: { name: SortOrder.Ascending },
           }),
           ModelAPI.getList({
@@ -986,6 +1014,7 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
           }),
         ]);
         setServices(serviceResult.data || []);
+        setRumApplications(rumApplicationResult.data || []);
         setHosts(hostResult.data || []);
         setDockerHosts(dockerHostResult.data || []);
         setPodmanHosts(podmanHostResult.data || []);
