@@ -25,6 +25,7 @@ import Host from "../../../Models/DatabaseModels/Host";
 import DockerHost from "../../../Models/DatabaseModels/DockerHost";
 import PodmanHost from "../../../Models/DatabaseModels/PodmanHost";
 import KubernetesCluster from "../../../Models/DatabaseModels/KubernetesCluster";
+import RumApplication from "../../../Models/DatabaseModels/RumApplication";
 import { LIMIT_PER_PROJECT } from "../../../Types/Database/LimitMax";
 import SortOrder from "../../../Types/BaseDatabase/SortOrder";
 import ListResult from "../../../Types/BaseDatabase/ListResult";
@@ -404,12 +405,14 @@ const LogsViewer: FunctionComponent<ComponentProps> = (
           dockerHosts,
           podmanHosts,
           kubernetesClusters,
+          rumApplications,
         ]: [
           ListResult<Service>,
           ListResult<Host>,
           ListResult<DockerHost>,
           ListResult<PodmanHost>,
           ListResult<KubernetesCluster>,
+          ListResult<RumApplication>,
         ] = await Promise.all([
           ModelAPI.getList({
             modelType: Service,
@@ -476,6 +479,19 @@ const LogsViewer: FunctionComponent<ComponentProps> = (
               name: SortOrder.Ascending,
             },
           }),
+          ModelAPI.getList({
+            modelType: RumApplication,
+            query: {},
+            select: {
+              name: true,
+              appIdentifier: true,
+            },
+            limit: LIMIT_PER_PROJECT,
+            skip: 0,
+            sort: {
+              name: SortOrder.Ascending,
+            },
+          }),
         ]);
 
         const services: Dictionary<Service> = {};
@@ -499,6 +515,30 @@ const LogsViewer: FunctionComponent<ComponentProps> = (
           services[projectId.toString()] =
             TelemetryServiceUtil.getUnknownService(projectId);
         }
+
+        /*
+         * RUM: logs de browser/mobile carregam primaryEntityId =
+         * RumApplication (o ingest devolve service null DE PROPOSITO — vide
+         * fix .9 no TracesViewer). Sem entrada neste mapa, a coluna Service
+         * das rows, o facet Service e as sugestoes da busca mostram o UUID
+         * cru da RumApplication (visto na medsoft2-web). Pseudo-Service so
+         * com nome (sem cor), mesmo racional do merge do .9; nunca
+         * sobrescreve um Service real de mesmo id.
+         */
+        rumApplications.data.forEach((rumApplication: RumApplication) => {
+          if (
+            !rumApplication.id ||
+            services[rumApplication.id.toString()]
+          ) {
+            return;
+          }
+          const pseudoService: Service = new Service();
+          pseudoService.name =
+            rumApplication.name ||
+            rumApplication.appIdentifier ||
+            "RUM Application";
+          services[rumApplication.id.toString()] = pseudoService;
+        });
 
         const hostsById: Dictionary<Host> = {};
         hosts.data.forEach((host: Host) => {
