@@ -520,3 +520,21 @@ o próprio `AlertOwners/SendNotePostedNotification` também é `false` — a fam
 Alert simplesmente ficou atrás. Patch `.8` = flip dos 2 para `false` (alinhamento,
 não opinião). Notificações reais aos owners (e-mail/push) intocadas; feed in-app
 mantido.
+
+## 2026-08-10 — tag `.11`: chips de escopo RUM resolvem nome (Logs + Traces)
+
+Terceiro sintoma da familia `.9`/`.10`: a RUM app `medsoft2-web` mostrava
+"Service: fd688097-…" (UUID cru) nos chips read-only das abas Logs e Traces.
+Causa: LogsViewer monta o chip direto de `props.serviceIds` sem mapa de
+nomes; TracesViewer resolve o chip via `valueDisplayMap` do facet,
+construido SO de Service rows — o merge pseudo-Service do `.9` alimentava as
+ROWS, nao o facet. Fix: prop opcional `serviceDisplayName` no LogsViewer
+(a page RUM passa `name`/`appIdentifier`, ja buscados) + merge de
+`rumApplications` nos DOIS mapas de nome do TracesViewer (facet + dimensao
+analytics). Follow-up upstream-compatible: as demais paginas de entidade
+(Host/Docker/Podman/K8s/Serverless/Proxmox/Cloud) tem o mesmo chip cru no
+LogsViewer — adotar o prop quando tocar la.
+
+Build note: base Node FLUTUANTE (26.x) — o npm do dia pode divergir do da
+tag anterior; o gate real do patch de dashboard e o `npm run compile` (tsc)
+no ultimo estagio do App.Dockerfile.
