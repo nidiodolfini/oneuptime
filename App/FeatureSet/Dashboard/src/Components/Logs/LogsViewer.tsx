@@ -64,6 +64,14 @@ import InBetween from "Common/Types/BaseDatabase/InBetween";
 export interface ComponentProps {
   id: string;
   serviceIds?: Array<ObjectID> | undefined;
+  /*
+   * Display name for the read-only serviceIds scope chip. RUM (e outras
+   * entidades nao-Service) passam em serviceIds um id que NAO tem Service
+   * row — sem este prop o chip mostra o id cru ("Service: <uuid>", visto na
+   * RUM app medsoft2-web). O caller que ja tem o nome resolvido (ex.
+   * Rum/View/Logs.tsx busca `name`) o injeta aqui. Fallback: o id.
+   */
+  serviceDisplayName?: string | undefined;
   enableRealtime?: boolean;
   traceIds?: Array<string> | undefined;
   spanIds?: Array<string> | undefined;
@@ -1488,7 +1496,7 @@ const DashboardLogsViewer: FunctionComponent<ComponentProps> = (
           facetKey: "primaryEntityId",
           value: primaryEntityId.toString(),
           displayKey: "Service",
-          displayValue: primaryEntityId.toString(),
+          displayValue: props.serviceDisplayName || primaryEntityId.toString(),
           readOnly: true,
         });
       }
@@ -1538,7 +1546,13 @@ const DashboardLogsViewer: FunctionComponent<ComponentProps> = (
     }
 
     return filters;
-  }, [props.serviceIds, props.traceIds, props.spanIds, logQueryAttributes]);
+  }, [
+    props.serviceIds,
+    props.serviceDisplayName,
+    props.traceIds,
+    props.spanIds,
+    logQueryAttributes,
+  ]);
 
   // Build activeFilters array for UI display
   const activeFilters: Array<ActiveFilter> = useMemo(() => {

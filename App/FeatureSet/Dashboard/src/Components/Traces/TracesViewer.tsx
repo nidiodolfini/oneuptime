@@ -1544,6 +1544,19 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
         }
       }
     }
+    /*
+     * RUM: o chip de escopo (props.primaryEntityId) e o facet Service
+     * carregam ids de RumApplication — sem entrada neste mapa o
+     * resolveDisplay cai no id cru e a aba Traces da RUM app mostra
+     * "Service: <uuid>". Mesmo racional do merge pseudo-Service das rows
+     * (fix .9); so nome, sem cor.
+     */
+    for (const rumApplication of rumApplications) {
+      if (rumApplication.id && !serviceNameMap[rumApplication.id.toString()]) {
+        serviceNameMap[rumApplication.id.toString()] =
+          rumApplication.name || "Unknown";
+      }
+    }
 
     const hostNameMap: Record<string, string> = {};
     for (const host of hosts) {
@@ -1655,7 +1668,14 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
         priority: 9,
       },
     ];
-  }, [services, hosts, dockerHosts, podmanHosts, kubernetesClusters]);
+  }, [
+    services,
+    rumApplications,
+    hosts,
+    dockerHosts,
+    podmanHosts,
+    kubernetesClusters,
+  ]);
 
   // Histogram series — status-stacked counts, or a single latency series.
   const histogramSeries: Array<HistogramSeriesOption> = useMemo(() => {
@@ -1689,8 +1709,14 @@ const TracesViewer: FunctionComponent<Props> = (props: Props): ReactElement => {
         map[service.id.toString()] = service.name || "Unknown";
       }
     }
+    // RUM ids na dimensao service — mesmo motivo do merge no facetConfigs.
+    for (const rumApplication of rumApplications) {
+      if (rumApplication.id && !map[rumApplication.id.toString()]) {
+        map[rumApplication.id.toString()] = rumApplication.name || "Unknown";
+      }
+    }
     return map;
-  }, [services]);
+  }, [services, rumApplications]);
 
   // Facet interaction
   const handleFacetInclude: (facetKey: string, value: string) => void =

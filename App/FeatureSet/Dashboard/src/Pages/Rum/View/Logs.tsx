@@ -79,6 +79,7 @@ const RumApplicationLogs: FunctionComponent<
       <DashboardLogsViewer
         id={`rum-application-logs-${modelId.toString()}`}
         serviceIds={[modelId]}
+        serviceDisplayName={rumApplication.name || rumApplication.appIdentifier}
         showFilters={true}
         enableRealtime={true}
         noLogsMessage="No logs found for this application."
