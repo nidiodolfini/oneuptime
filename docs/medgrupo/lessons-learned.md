@@ -538,3 +538,36 @@ LogsViewer — adotar o prop quando tocar la.
 Build note: base Node FLUTUANTE (26.x) — o npm do dia pode divergir do da
 tag anterior; o gate real do patch de dashboard e o `npm run compile` (tsc)
 no ultimo estagio do App.Dockerfile.
+
+## 2026-08-11 — 12.0.6-medgrupo.1: rebase major 11.0.3 → 12.0.6
+
+1.652 commits upstream. Triagem completa na memoria do agente
+(projeto-upgrade-oneuptime-fork-12x) e no PR do gitops. Resumo:
+
+- 3 patches DROPADOS (viraram upstream): max_tokens Anthropic
+  (LLMService reescrito), Service find/create race (QueryHelper.
+  findWithSameText), chore de import.
+- 20 RE-APLICADOS. Surpresa boa: so 4 conflitos reais (ProcessTelemetry
+  comentario, TraceTable onViewPage — upstream ganhou query param spanId,
+  merge manteve toHexId nos dois IDs —, BaseModelTable fetchAllBulkItems
+  (hunk do bulk SUPERADO pela reescrita upstream com getSelect; mantido so
+  o hunk do dropdown limit 100) e EditionLabel).
+- EditionLabel: stub Medgrupo reescrito por cima do componente novo
+  (+1596 linhas de UX de licenca) — interface conferida nos 3 consumidores.
+- Chips RUM (r11): conceito serviceDisplayName MORREU; 12.x tem o hook
+  Components/Telemetry/useServiceNames.ts — estendido para resolver
+  RumApplication alem de Service (cobre Logs+Metrics viewers de uma vez).
+- NOVO: SendUnresolvedReminderNotification (Incident+Alert) nasceram na
+  12.x com sendWorkspaceNotification: true — suprimidos (mesma regra dos
+  bells).
+- NOVO: dispatch do body parser do StartServer ganhou um 2o teste de
+  content-type — sem rotear application/proto e connect+proto pro parser
+  protobuf, o fan-out de profiles do Alloy quebraria DE NOVO (o parser em
+  si ja tinha os tipos; era so o dispatch).
+- Build: identico (gomplate + docker build; estagio novo BrowserRecorder).
+  tsc passou de primeira; imagem 12.0.6-medgrupo.1.
+
+Deploy exige o cluster.xml "cluster of one" (Keeper embutido) montado no
+ClickHouse ANTES do boot da 12.x — ver chart med-uptime no gitops. Cutover
+de CH e forward-only (historico de telemetria descartado por decisao —
+LGTM hub e o forense). Rollback = restore de dump Postgres (scrypt).
