@@ -499,7 +499,9 @@ async function notifyOwnersOfReminder(
       mdText`🔔 **Reminder sent to owners of [Alert ${alertNumberDisplayValue}](${alertViewLink})**: This alert is still **${currentStateName}** and has been open for **${openDuration}**.`.toString(),
     moreInformationInMarkdown: moreAlertFeedInformationInMarkdown,
     workspaceNotification: {
-      sendWorkspaceNotification: true,
+      // Medgrupo: bell de owner nao espelha no canal (mesma regra dos jobs
+      // SendCreatedResourceNotification/SendStateChangeNotification).
+      sendWorkspaceNotification: false,
     },
   });
 
