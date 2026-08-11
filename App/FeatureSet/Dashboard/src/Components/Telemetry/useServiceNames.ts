@@ -1,3 +1,4 @@
+import RumApplication from "Common/Models/DatabaseModels/RumApplication";
 import Service from "Common/Models/DatabaseModels/Service";
 import ObjectID from "Common/Types/ObjectID";
 import Includes from "Common/Types/BaseDatabase/Includes";
@@ -80,6 +81,42 @@ const useServiceNames: (
             map[service.id.toString()] = service.name.toString();
           }
         }
+
+        /*
+         * Medgrupo fork: telemetria de RUM usa o id da RumApplication como
+         * primaryEntityId (o ingest devolve service null DE PROPOSITO), e o
+         * upstream so consulta Service — o chip de uma RUM app cairia no UUID
+         * cru (regressao dos r11/r12 do 11.x). Resolve os ids restantes
+         * contra RumApplication e mergeia no mesmo mapa; quem nao resolver
+         * segue caindo no fallback do id.
+         */
+        const unresolved: Array<ObjectID> = ids.filter((id: ObjectID) => {
+          return !map[id.toString()];
+        });
+        if (unresolved.length > 0) {
+          const rumResult: ListResult<RumApplication> = await ModelAPI.getList({
+            modelType: RumApplication,
+            query: {
+              projectId,
+              _id: new Includes(unresolved),
+            },
+            limit: LIMIT_PER_PROJECT,
+            skip: 0,
+            select: {
+              _id: true,
+              name: true,
+            },
+            sort: {
+              name: SortOrder.Ascending,
+            },
+          });
+          for (const rumApp of rumResult.data || []) {
+            if (rumApp.id && rumApp.name) {
+              map[rumApp.id.toString()] = rumApp.name.toString();
+            }
+          }
+        }
+
         setServiceNameMap(map);
       } catch {
         // Non-critical: the chip falls back to the raw id string.
