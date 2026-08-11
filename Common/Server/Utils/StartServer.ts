@@ -227,7 +227,15 @@ app.use((req: OneUptimeRequest, res: ExpressResponse, next: NextFunction) => {
   } else if (
     contentType &&
     (contentType.includes("application/x-protobuf") ||
-      contentType.includes("application/protobuf"))
+      contentType.includes("application/protobuf") ||
+      /*
+       * Connect-RPC (Alloy fan-out de profiles do Medgrupo): sem estes dois
+       * tipos aqui, o dispatch novo da 12.x manda a request pro parser JSON
+       * e o parser protobuf acima (que JA aceita os tipos) nunca roda —
+       * mesmo sintoma do project_profiles_fanout_blocked_2026-05-13.
+       */
+      contentType.includes("application/proto") ||
+      contentType.includes("application/connect+proto"))
   ) {
     protobufBodyParserMiddleware(req, res, next);
   } else {
