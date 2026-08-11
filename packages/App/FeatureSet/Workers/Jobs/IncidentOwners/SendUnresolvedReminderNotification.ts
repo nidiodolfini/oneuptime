@@ -492,7 +492,9 @@ async function notifyOwnersOfReminder(
      * notice is ever posted as one.
      */
     workspaceNotification: {
-      sendWorkspaceNotification: true,
+      // Medgrupo: bell de owner nao espelha no canal (mesma regra dos jobs
+      // SendCreatedResourceNotification/SendStateChangeNotification).
+      sendWorkspaceNotification: false,
       updateKinds: [NotificationRuleUpdateKind.Reminders],
     },
   });
