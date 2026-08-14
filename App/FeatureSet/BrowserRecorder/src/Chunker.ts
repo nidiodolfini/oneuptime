@@ -37,6 +37,15 @@ const EVENT_TYPE_META: number = 4;
 export const SESSION_REPLAY_TRUNCATED_NOTICE: string = "truncated";
 
 /*
+ * PATCH medgrupo: teto de um evento indivisivel emitido como chunk unico
+ * (ver emitSplitEvent). Espelha MAX_DECOMPRESSED_FRAME_BYTES do worker
+ * (SessionReplayIngestService) — acima disso o servidor abortaria o inflate,
+ * entao dropar aqui com SnapshotTooLarge e o mesmo resultado com menos
+ * banda gasta.
+ */
+export const SESSION_REPLAY_MAX_SINGLE_EVENT_BYTES: number = 8 * 1024 * 1024;
+
+/*
  * UTF-8 byte length, without allocating the encoded copy.
  *
  * Everything in this file used to count String.length, which is UTF-16 code
@@ -359,53 +368,56 @@ export default class Chunker {
   }
 
   /*
-   * Split one oversized event across as many chunks as it needs.
+   * PATCH medgrupo (12.0.6-medgrupo.2): um evento maior que o flush
+   * threshold sobe INTEIRO num chunk proprio, sem split em snapshotPart.
    *
-   * The parts carry raw slices of the array text, so only the concatenation
-   * of all parts is valid JSON. snapshotPart tells the receiving side how
-   * many to expect, and hasFullSnapshot is set only on the last one so no
-   * seek anchor ever points into the middle of a snapshot.
+   * O split do upstream fatiava o texto JSON em partes que so parseiam
+   * concatenadas — mas NEM o worker (decodePayload faz JSON.parse por
+   * frame) NEM o player (SessionReplayReadService, zero mencoes a
+   * snapshotPart) remontam as partes. Resultado em producao: TODO chunk de
+   * snapshot de um DOM real (>256KB, caso medsoft2-web: CSS custom
+   * properties) morria como payload-undecodable ("Unexpected token
+   * 'olor-prima'...") e nenhuma sessao materializava.
+   *
+   * Um chunk unico e seguro nos caps do servidor: o payload vai gzipado
+   * (CSS/DOM JSON comprime ~10:1) sob o teto de 2 MiB do POST, e o worker
+   * descomprime ate 8 MiB por frame (MAX_DECOMPRESSED_FRAME_BYTES). Acima
+   * de 8 MiB cru: drop honesto com SnapshotTooLarge — melhor um buraco
+   * declarado no player que uma sessao inteira perdida.
    */
   private emitSplitEvent(event: BufferedEvent): void {
     const body: string = `[${event.json}]`;
-    const slices: Array<string> = splitByUtf8Bytes(body, this.maxPayloadBytes);
-    const partCount: number = slices.length;
+    const bodyBytes: number = utf8ByteLength(body);
     const offsetMs: number = this.getOffset(event.timestampMs);
 
-    for (let index: number = 0; index < partCount; index++) {
-      if (this.hasReachedSessionChunkCap()) {
-        this.droppedEvents++;
-        this.emitTruncationChunk();
-        return;
-      }
-
-      const slice: string = slices[index] as string;
-
-      const isLastPart: boolean = index === partCount - 1;
-
-      this.closedChunkCount++;
-
-      this.sink({
-        payload: slice,
-        rawBytes: utf8ByteLength(slice),
-
-        /*
-         * Only the last part reports the event, so summing eventCount over
-         * the session does not multiply-count one snapshot.
-         */
-        eventCount: isLastPart ? 1 : 0,
-        chunkStartOffsetMs: offsetMs,
-        chunkEndOffsetMs: offsetMs,
-        hasFullSnapshot: isLastPart && event.type === EVENT_TYPE_FULL_SNAPSHOT,
-        isFinal: false,
-        snapshotPart: { index: index, total: partCount },
-        signals: this.signals,
-        fidelityNotices: Array.from(this.fidelityNotices),
-        traceIds: Array.from(this.traceIds),
-      });
-
-      this.resetPerChunkCounters();
+    if (bodyBytes > SESSION_REPLAY_MAX_SINGLE_EVENT_BYTES) {
+      this.droppedEvents++;
+      this.fidelityNotices.add(SessionReplayFidelityNotice.SnapshotTooLarge);
+      return;
     }
+
+    if (this.hasReachedSessionChunkCap()) {
+      this.droppedEvents++;
+      this.emitTruncationChunk();
+      return;
+    }
+
+    this.closedChunkCount++;
+
+    this.sink({
+      payload: body,
+      rawBytes: bodyBytes,
+      eventCount: 1,
+      chunkStartOffsetMs: offsetMs,
+      chunkEndOffsetMs: offsetMs,
+      hasFullSnapshot: event.type === EVENT_TYPE_FULL_SNAPSHOT,
+      isFinal: false,
+      signals: this.signals,
+      fidelityNotices: Array.from(this.fidelityNotices),
+      traceIds: Array.from(this.traceIds),
+    });
+
+    this.resetPerChunkCounters();
   }
 
   /*
