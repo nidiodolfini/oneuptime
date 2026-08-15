@@ -571,3 +571,17 @@ Deploy exige o cluster.xml "cluster of one" (Keeper embutido) montado no
 ClickHouse ANTES do boot da 12.x — ver chart med-uptime no gitops. Cutover
 de CH e forward-only (historico de telemetria descartado por decisao —
 LGTM hub e o forense). Rollback = restore de dump Postgres (scrypt).
+
+### 2026-08-15 — patch no BrowserRecorder exige bump da versao do pacote (SRI × cache de 1 ano)
+
+O artefato do recorder e servido em rota VERSIONADA com cache de 1 ano
+(`/session-replay/v{version}/recorder.js`), e o loader injeta o script com
+`integrity` (SRI sha384) lido do CONFIG. A versao vem do package.json do
+BrowserRecorder — que a 12.0.6-medgrupo.2 NAO bumpou. Consequencia: browser
+com o artefato ANTIGO em cache pede a MESMA URL, recebe o cached, o SRI novo
+nao bate e o script e BLOQUEADO em silencio (sem replay; RUM segue). Afeta so
+quem baixou o recorder entre o flip (14/08 ~17h) e o rollout da .2 (15/08
+~08h50) — populacao minuscula, auto-cura por hard-refresh/limpeza de cache.
+REGRA: todo build que tocar App/FeatureSet/BrowserRecorder/src deve bumpar
+`version` no App/FeatureSet/BrowserRecorder/package.json (ex.:
+12.0.6-medgrupo.2) — URL nova, zero colisao de cache.
