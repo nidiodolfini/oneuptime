@@ -231,6 +231,27 @@ export default class SessionId {
     SessionId.writeSessionStorage(SessionId.getChunkIndexKey(tabId), "0");
   }
 
+  /*
+   * PATCH medgrupo (12.0.6-medgrupo.3): devolve um indice cunhado quando o
+   * chamador tem CERTEZA sincrona de que o chunk nunca saiu (o terminal
+   * keepalive estourou a quota e foi descartado no cliente). Sem isso o
+   * indice queimado virava um buraco permanente que o finalizer reporta como
+   * "chunk missing" — um gap declarado para um chunk que nunca existiu.
+   *
+   * So devolve se o contador ainda esta exatamente em index+1: se qualquer
+   * outro chunk cunhou no meio, devolver reusaria um indice ja postado.
+   */
+  public static releaseChunkIndex(tabId: string, index: number): void {
+    if (SessionId.peekChunkIndex(tabId) !== index + 1) {
+      return;
+    }
+
+    SessionId.writeSessionStorage(
+      SessionId.getChunkIndexKey(tabId),
+      String(index),
+    );
+  }
+
   private static getChunkIndexKey(tabId: string): string {
     return `${CHUNK_INDEX_STORAGE_KEY}.${tabId}`;
   }

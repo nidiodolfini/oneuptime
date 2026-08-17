@@ -659,5 +659,128 @@ describe("Transport", (): void => {
       expect(fetchMock).not.toHaveBeenCalled();
       expect(transport.getDroppedChunkCount()).toBe(1);
     });
+
+    /*
+     * PATCH medgrupo: a retry queue embarcava no tumulo da pagina. Um chunk
+     * que flakeou na rede segundos antes de um F5 era perdido para sempre e
+     * virava "1 chunk missing" no meio da sessao.
+     */
+    it("drains the retry queue on the terminal flush", (): void => {
+      const fetchMock: jest.Mock = jest.fn().mockResolvedValue(respond(202));
+
+      (globalThis as unknown as Record<string, unknown>)["fetch"] = fetchMock;
+
+      const transport: Transport = makeTransport();
+
+      (
+        transport as unknown as {
+          retryQueue: Array<{
+            envelope: SessionReplayChunkEnvelope;
+            payload: string;
+          }>;
+        }
+      ).retryQueue.push({
+        envelope: { ...envelope, chunkIndex: 2 },
+        payload: "[{\"queued\":true}]",
+      });
+
+      expect(transport.sendTerminal(envelope, "[{}]")).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(transport.getDroppedChunkCount()).toBe(0);
+      expect(transport.getQueueDepth()).toBe(0);
+
+      for (const call of fetchMock.mock.calls) {
+        const init: Record<string, unknown> = call[1] as Record<
+          string,
+          unknown
+        >;
+
+        expect(init["keepalive"]).toBe(true);
+      }
+    });
+
+    it("skips a queued chunk that does not fit, still sends the terminal", (): void => {
+      const fetchMock: jest.Mock = jest.fn().mockResolvedValue(respond(202));
+
+      (globalThis as unknown as Record<string, unknown>)["fetch"] = fetchMock;
+
+      const transport: Transport = makeTransport();
+
+      (
+        transport as unknown as {
+          retryQueue: Array<{
+            envelope: SessionReplayChunkEnvelope;
+            payload: string;
+          }>;
+        }
+      ).retryQueue.push({
+        envelope: { ...envelope, chunkIndex: 2 },
+        payload: `[${"x".repeat(SESSION_REPLAY_KEEPALIVE_MAX_BYTES)}]`,
+      });
+
+      expect(transport.sendTerminal(envelope, "[{}]")).toBe(true);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(transport.getDroppedChunkCount()).toBe(1);
+    });
+
+    it("an oversized terminal still lets the queue drain", (): void => {
+      const fetchMock: jest.Mock = jest.fn().mockResolvedValue(respond(202));
+
+      (globalThis as unknown as Record<string, unknown>)["fetch"] = fetchMock;
+
+      const transport: Transport = makeTransport();
+
+      (
+        transport as unknown as {
+          retryQueue: Array<{
+            envelope: SessionReplayChunkEnvelope;
+            payload: string;
+          }>;
+        }
+      ).retryQueue.push({
+        envelope: { ...envelope, chunkIndex: 2 },
+        payload: "[{\"queued\":true}]",
+      });
+
+      const huge: string = `[${"x".repeat(SESSION_REPLAY_KEEPALIVE_MAX_BYTES)}]`;
+
+      expect(transport.sendTerminal(envelope, huge)).toBe(false);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(transport.getDroppedChunkCount()).toBe(1);
+    });
+  });
+
+  /*
+   * PATCH medgrupo: a directive de um 204 viaja em header
+   * (x-oneuptime-replay-directive) porque um 204 nao pode carregar corpo. O
+   * upstream so lia o corpo, entao budget-exhausted/not-sampled/session-cap
+   * eram tratados como accepted e o recorder seguia queimando indices.
+   */
+  describe("directive via response header", (): void => {
+    it("applies stop from the header of a bodyless 204", async (): Promise<void> => {
+      const fetchMock: jest.Mock = jest
+        .fn()
+        .mockResolvedValue(
+          respond(204, "", { "x-oneuptime-replay-directive": "stop" }),
+        );
+
+      (globalThis as unknown as Record<string, unknown>)["fetch"] = fetchMock;
+
+      await makeTransport().send(envelope, "[]");
+
+      expect(directives).toEqual(["stop"]);
+    });
+
+    it("body directive still works when there is no header", async (): Promise<void> => {
+      const fetchMock: jest.Mock = jest
+        .fn()
+        .mockResolvedValue(respond(200, "{\"directive\":\"stop\"}"));
+
+      (globalThis as unknown as Record<string, unknown>)["fetch"] = fetchMock;
+
+      await makeTransport().send(envelope, "[]");
+
+      expect(directives).toEqual(["stop"]);
+    });
   });
 });

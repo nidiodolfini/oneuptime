@@ -306,18 +306,74 @@ export default class Transport {
       payloadBytes,
     );
 
-    if (body.length > SESSION_REPLAY_KEEPALIVE_MAX_BYTES) {
+    /*
+     * PATCH medgrupo (12.0.6-medgrupo.3): a retry queue tambem embarca no
+     * terminal. Ela morria com a pagina — um chunk que flakeou na rede
+     * segundos antes de um F5 (o cenario refresh-rage inteiro) era perdido
+     * para sempre e virava "1 chunk missing" no meio da sessao (caso real:
+     * chunk 2 da sessao c7e798b2). O orcamento e a MESMA quota keepalive de
+     * 64 KB por origem que motiva o cap do proprio terminal: reserva-se o
+     * corpo do terminal (quando ele cabe) e a fila consome o resto, em ordem
+     * de indice, pulando o que nao couber — cada chunk leva o proprio
+     * chunkIndex e o servidor ordena por ele de toda forma.
+     */
+    const terminalFits: boolean =
+      body.length <= SESSION_REPLAY_KEEPALIVE_MAX_BYTES;
+
+    let keepaliveBudget: number =
+      SESSION_REPLAY_KEEPALIVE_MAX_BYTES - (terminalFits ? body.length : 0);
+
+    const queued: Array<QueuedChunk> = this.retryQueue;
+    this.retryQueue = [];
+
+    for (const chunk of queued) {
+      const queuedPayload: PayloadBytes = new TextEncoder().encode(
+        chunk.payload,
+      );
+
+      const queuedBody: PayloadBytes = Transport.buildBody(
+        {
+          ...chunk.envelope,
+          payloadEncoding: "identity",
+          payloadBytes: queuedPayload.length,
+        },
+        queuedPayload,
+      );
+
+      if (queuedBody.length > keepaliveBudget) {
+        this.droppedChunks++;
+        continue;
+      }
+
+      if (this.postKeepalive(queuedBody)) {
+        keepaliveBudget -= queuedBody.length;
+      } else {
+        this.droppedChunks++;
+      }
+    }
+
+    if (!terminalFits) {
       this.droppedChunks++;
       return false;
     }
 
+    if (this.postKeepalive(body)) {
+      return true;
+    }
+
+    this.droppedChunks++;
+    return false;
+  }
+
+  /*
+   * One fire-and-forget keepalive POST. The returned promise is intentionally
+   * not awaited: the page is going away, and keepalive means the browser
+   * completes the request without the document. A rejection here is
+   * unobservable and must not surface as an unhandled rejection on the
+   * customer's page.
+   */
+  private postKeepalive(body: PayloadBytes): boolean {
     try {
-      /*
-       * The returned promise is intentionally not awaited: the page is
-       * going away, and keepalive means the browser completes the request
-       * without the document. A rejection here is unobservable and must not
-       * surface as an unhandled rejection on the customer's page.
-       */
       void fetch(this.options.url, {
         method: "POST",
         keepalive: true,
@@ -331,7 +387,6 @@ export default class Transport {
 
       return true;
     } catch {
-      this.droppedChunks++;
       return false;
     }
   }
@@ -425,6 +480,29 @@ export default class Transport {
 
   private async applyDirective(response: Response): Promise<void> {
     try {
+      /*
+       * PATCH medgrupo (12.0.6-medgrupo.3): a directive tambem viaja em
+       * header. Um 204 nao pode carregar corpo, entao o gate do ingest manda
+       * o veredito em x-oneuptime-replay-directive
+       * (SessionReplayIngest.sendChunkDirective; o CORS ja o expoe em
+       * CORS_EXPOSED_HEADERS) — o upstream escreveu o lado servidor e nunca
+       * leu o header aqui. Consequencia: budget-exhausted/not-sampled/
+       * session-cap respondiam 204+Stop, o transporte tratava como accepted
+       * e o recorder seguia gravando e queimando chunkIndex — cada chunk
+       * seguinte um buraco novo na sessao.
+       */
+      const headerDirective: string | null = response.headers
+        ? response.headers.get("x-oneuptime-replay-directive")
+        : null;
+
+      if (
+        headerDirective === "stop" ||
+        headerDirective === "throttle" ||
+        headerDirective === "continue"
+      ) {
+        this.options.onDirective(headerDirective);
+      }
+
       const text: string = await response.text();
 
       if (!text) {

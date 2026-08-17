@@ -292,4 +292,32 @@ describe("SessionId", (): void => {
       ).toBe(SessionRotationReason.Idle);
     });
   });
+
+  /*
+   * PATCH medgrupo (12.0.6-medgrupo.3): devolver um indice cunhado quando o
+   * terminal keepalive foi descartado no cliente — sem devolver, o buraco
+   * aparece como "chunk missing" para um chunk que nunca existiu.
+   */
+  describe("releaseChunkIndex", (): void => {
+    it("returns the index when it is the most recently minted", (): void => {
+      const tabId: string = "tab-release-ok";
+
+      expect(SessionId.getNextChunkIndex(tabId)).toBe(0);
+
+      SessionId.releaseChunkIndex(tabId, 0);
+
+      expect(SessionId.getNextChunkIndex(tabId)).toBe(0);
+    });
+
+    it("refuses to release when another index was minted after it", (): void => {
+      const tabId: string = "tab-release-guard";
+
+      expect(SessionId.getNextChunkIndex(tabId)).toBe(0);
+      expect(SessionId.getNextChunkIndex(tabId)).toBe(1);
+
+      SessionId.releaseChunkIndex(tabId, 0);
+
+      expect(SessionId.getNextChunkIndex(tabId)).toBe(2);
+    });
+  });
 });

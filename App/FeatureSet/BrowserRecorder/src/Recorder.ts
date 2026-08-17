@@ -201,6 +201,16 @@ export default class Recorder {
   private hasSentFinalChunk: boolean = false;
   private lastSensitiveScanAtMs: number = 0;
   private droppedEvents: number = 0;
+
+  /*
+   * PATCH medgrupo (12.0.6-medgrupo.3): watchdog da ancora de playback.
+   * O player so renderiza a partir de um FullSnapshot; um upload que comeca
+   * sem um e invisivel ate o proximo checkout (+60s). Ver
+   * scheduleSnapshotRecovery.
+   */
+  private sawSnapshotInUpload: boolean = false;
+  private snapshotRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private snapshotRecoveryAttempt: number = 0;
   private userRef: string | null = null;
 
   /*
@@ -766,6 +776,10 @@ export default class Recorder {
     };
 
     if (this.uploading) {
+      if (buffered.type === EVENT_TYPE_FULL_SNAPSHOT) {
+        this.markSnapshotSeen();
+      }
+
       this.chunker.add(buffered);
       return;
     }
@@ -992,8 +1006,29 @@ export default class Recorder {
      * to have it when something went wrong, and it is most useful in the
      * seconds right after.
      */
-    this.chunker.addMany(this.buffer.drain());
+    const preRoll: Array<BufferedEvent> = this.buffer.drain();
+
+    this.sawSnapshotInUpload = preRoll.some(
+      (event: BufferedEvent): boolean => {
+        return event.type === EVENT_TYPE_FULL_SNAPSHOT;
+      },
+    );
+
+    this.chunker.addMany(preRoll);
     this.chunker.close(false);
+
+    /*
+     * PATCH medgrupo (12.0.6-medgrupo.3): um upload sem FullSnapshot e
+     * invisivel no player. Em producao o pre-roll chegava sem snapshot com
+     * frequencia (o snapshot() inicial do rrweb falha em pagina instavel e o
+     * errorHandler engole; record.takeFullSnapshot LANCA antes do init
+     * pos-load) e a primeira ancora era o checkout +60s — exatamente nas
+     * sessoes de frustracao. Evidencia: sessoes c7e798b2/13c2338a, primeiro
+     * hasFullSnapshot = trigger+60,4s em ambas.
+     */
+    if (!this.sawSnapshotInUpload) {
+      this.scheduleSnapshotRecovery();
+    }
   }
 
   private onFlushTimer(): void {
@@ -1012,6 +1047,16 @@ export default class Recorder {
 
     if (!this.uploading) {
       return;
+    }
+
+    /*
+     * PATCH medgrupo: cinto do watchdog de snapshot. Se o backoff de
+     * scheduleSnapshotRecovery esgotou (pagina que levou dezenas de segundos
+     * para ficar gravavel), o tick continua pedindo a ancora ate ela passar
+     * de verdade pelo emit.
+     */
+    if (!this.sawSnapshotInUpload) {
+      this.takeFullSnapshot();
     }
 
     this.chunker.close(false);
@@ -1093,6 +1138,8 @@ export default class Recorder {
     this.triggerReason = null;
     this.hasSentFinalChunk = false;
     this.droppedEvents = 0;
+    this.sawSnapshotInUpload = false;
+    this.cancelSnapshotRecovery();
 
     this.identity = SessionId.resolveSession(nowUnixMs, this.identity.tabId);
     this.chunker = this.createChunker();
@@ -1210,7 +1257,17 @@ export default class Recorder {
     );
 
     if (this.isTerminalFlush) {
-      this.transport.sendTerminal(envelope, chunk.payload);
+      /*
+       * PATCH medgrupo (12.0.6-medgrupo.3): quando o proprio transporte ja
+       * sabe, sincronamente, que o terminal nao saiu (quota keepalive), o
+       * indice cunhado e devolvido. Cunhado-e-descartado virava um buraco
+       * permanente que o finalizer reporta como "chunk missing" — um gap
+       * declarado para um chunk que nunca existiu no servidor.
+       */
+      if (!this.transport.sendTerminal(envelope, chunk.payload)) {
+        SessionId.releaseChunkIndex(this.identity.tabId, chunkIndex);
+      }
+
       return;
     }
 
@@ -1329,6 +1386,54 @@ export default class Recorder {
     } catch {
       /* See emitCustomEvent. */
     }
+  }
+
+  private markSnapshotSeen(): void {
+    this.sawSnapshotInUpload = true;
+    this.cancelSnapshotRecovery();
+  }
+
+  private cancelSnapshotRecovery(): void {
+    if (this.snapshotRecoveryTimer !== null) {
+      clearTimeout(this.snapshotRecoveryTimer);
+      this.snapshotRecoveryTimer = null;
+    }
+
+    this.snapshotRecoveryAttempt = 0;
+  }
+
+  /*
+   * PATCH medgrupo (12.0.6-medgrupo.3): pede a ancora ate ela existir.
+   *
+   * O oraculo de sucesso e o proprio emit (markSnapshotSeen via
+   * onRrwebEvent), nunca o retorno da chamada: takeFullSnapshot() engole a
+   * excecao por design (rrweb lanca "please take full snapshot after start
+   * recording" enquanto o init pos-load nao rodou) e o snapshot() interno
+   * pode falhar silenciosamente em DOM instavel (errorHandler devolve true).
+   * Backoff curto: a primeira tentativa e imediata (caso trigger-antes-do-
+   * init), as demais dao tempo do DOM estabilizar; o esgotamento fica coberto
+   * pelo cinto no onFlushTimer.
+   */
+  private scheduleSnapshotRecovery(): void {
+    const delaysMs: Array<number> = [0, 500, 1000, 2000, 4000, 8000];
+    const delayMs: number | undefined = delaysMs[this.snapshotRecoveryAttempt];
+
+    if (delayMs === undefined || this.snapshotRecoveryTimer !== null) {
+      return;
+    }
+
+    this.snapshotRecoveryAttempt++;
+
+    this.snapshotRecoveryTimer = setTimeout((): void => {
+      this.snapshotRecoveryTimer = null;
+
+      if (this.stopped || !this.uploading || this.sawSnapshotInUpload) {
+        return;
+      }
+
+      this.takeFullSnapshot();
+      this.scheduleSnapshotRecovery();
+    }, delayMs);
   }
 
   /*
@@ -1528,6 +1633,8 @@ export default class Recorder {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
+
+    this.cancelSnapshotRecovery();
 
     if (this.stopRrweb) {
       try {

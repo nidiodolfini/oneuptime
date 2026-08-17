@@ -1,5 +1,7 @@
+import { SessionReplayFidelityNotice } from "Common/Types/Rum/SessionReplay";
 import Chunker, {
   PendingChunk,
+  SESSION_REPLAY_MAX_SINGLE_EVENT_BYTES,
   SESSION_REPLAY_TRUNCATED_NOTICE,
   splitByUtf8Bytes,
   utf8ByteLength,
@@ -152,12 +154,12 @@ describe("Chunker", (): void => {
 
   describe("oversized snapshot splitting", (): void => {
     /*
-     * A FullSnapshot is one indivisible rrweb event. It cannot be split across
-     * chunks and still parse, so the parts carry raw slices and only the LAST
-     * part claims hasFullSnapshot - otherwise a seek anchor would point into
-     * the middle of a snapshot and the player would rebuild a partial DOM.
+     * PATCH medgrupo (12.0.6-medgrupo.2): um evento maior que o flush
+     * threshold sobe INTEIRO num chunk proprio. O split em snapshotPart do
+     * upstream nunca teve remontagem no worker nem no player, entao todo
+     * snapshot de DOM real morria como payload-undecodable.
      */
-    it("splits one oversized event into parts, anchoring only the last", (): void => {
+    it("emits one oversized event whole, in a chunk of its own", (): void => {
       const chunker: Chunker = makeChunker(50);
       const big: string = `{"type":2,"data":"${"x".repeat(200)}"}`;
 
@@ -165,24 +167,39 @@ describe("Chunker", (): void => {
         event({ type: 2, json: big, bytes: big.length, isCheckout: true }),
       );
 
-      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0]?.payload).toBe(`[${big}]`);
+      expect(chunks[0]?.eventCount).toBe(1);
+      expect(chunks[0]?.hasFullSnapshot).toBe(true);
+      expect(chunks[0]?.snapshotPart).toBeUndefined();
+      expect(JSON.parse(chunks[0]?.payload || "")).toHaveLength(1);
+    });
 
-      const total: number = chunks.length;
+    /*
+     * Acima de SESSION_REPLAY_MAX_SINGLE_EVENT_BYTES o servidor abortaria o
+     * inflate de qualquer forma: drop honesto, com fidelity notice e SEM
+     * consumir chunk — melhor um buraco declarado que uma sessao perdida.
+     */
+    it("drops an event beyond the single-event ceiling with a notice", (): void => {
+      const chunker: Chunker = makeChunker(50);
+      const enormous: string = `{"type":2,"data":"${"x".repeat(
+        SESSION_REPLAY_MAX_SINGLE_EVENT_BYTES,
+      )}"}`;
 
-      chunks.forEach((chunk: PendingChunk, index: number): void => {
-        expect(chunk.snapshotPart).toEqual({ index: index, total: total });
-        expect(chunk.hasFullSnapshot).toBe(index === total - 1);
-        expect(chunk.eventCount).toBe(index === total - 1 ? 1 : 0);
-      });
+      chunker.add(
+        event({
+          type: 2,
+          json: enormous,
+          bytes: enormous.length,
+          isCheckout: true,
+        }),
+      );
 
-      /* Concatenating every part reproduces the exact JSON array. */
-      const rejoined: string = chunks
-        .map((chunk: PendingChunk): string => {
-          return chunk.payload;
-        })
-        .join("");
-
-      expect(rejoined).toBe(`[${big}]`);
+      expect(chunks).toHaveLength(0);
+      expect(chunker.getDroppedEventCount()).toBe(1);
+      expect(chunker.getFidelityNotices()).toContain(
+        SessionReplayFidelityNotice.SnapshotTooLarge,
+      );
     });
   });
 
@@ -385,7 +402,12 @@ describe("splitByUtf8Bytes", (): void => {
 describe("Chunker oversized non-ASCII snapshot", (): void => {
   const SESSION_START: number = 1_700_000_000_000;
 
-  it("splits an emoji-bearing snapshot without corrupting it", (): void => {
+  /*
+   * PATCH medgrupo (12.0.6-medgrupo.2): sem split, o evento sobe inteiro —
+   * emoji e outros astrais atravessam o wire intactos porque nunca ha corte
+   * no meio de um surrogate pair.
+   */
+  it("emits an emoji-bearing snapshot whole, without corruption", (): void => {
     const chunks: Array<PendingChunk> = [];
 
     const chunker: Chunker = new Chunker({
@@ -406,18 +428,16 @@ describe("Chunker oversized non-ASCII snapshot", (): void => {
       type: 2,
     });
 
-    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks).toHaveLength(1);
 
     const decoder: TextDecoder = new TextDecoder();
-    const rejoined: string = chunks
-      .map((chunk: PendingChunk): string => {
-        /* Exactly what the wire does to each part: encode it on its own. */
-        return decoder.decode(new TextEncoder().encode(chunk.payload));
-      })
-      .join("");
+    const wire: string = decoder.decode(
+      new TextEncoder().encode(chunks[0]?.payload || ""),
+    );
 
-    expect(rejoined).toBe(`[${big}]`);
-    expect(rejoined).not.toContain("�");
-    expect(JSON.parse(rejoined)).toHaveLength(1);
+    expect(wire).toBe(`[${big}]`);
+    expect(wire).not.toContain("�");
+    expect(JSON.parse(wire)).toHaveLength(1);
+    expect(chunks[0]?.hasFullSnapshot).toBe(true);
   });
 });

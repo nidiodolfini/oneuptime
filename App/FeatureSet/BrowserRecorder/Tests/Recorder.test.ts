@@ -9,6 +9,7 @@ import SessionReplayCaptureTrigger from "Common/Types/Rum/SessionReplayCaptureTr
 import SessionReplayConsentMode from "Common/Types/Rum/SessionReplayConsentMode";
 import SessionReplayMaskingMode from "Common/Types/Rum/SessionReplayMaskingMode";
 import SessionReplayTriggerReason from "Common/Types/Rum/SessionReplayTriggerReason";
+import { record } from "rrweb";
 import { RecorderInitOptions } from "../src/Config";
 import { PERFORMANCE_CUSTOM_EVENT_TAG } from "../src/PerformanceRecorder";
 import Recorder from "../src/Recorder";
@@ -1098,6 +1099,74 @@ describe("Recorder", (): void => {
       expect(Recorder.getDeviceType("Macintosh")).toBe("desktop");
       expect(Recorder.getOsName("Mac OS X 10_15")).toBe("macOS");
       expect(Recorder.getOsName("Windows NT 10.0")).toBe("Windows");
+    });
+  });
+
+  /*
+   * PATCH medgrupo (12.0.6-medgrupo.3): o player so renderiza a partir de um
+   * FullSnapshot. Em producao o pre-roll drenado no trigger chegava sem
+   * snapshot (snapshot() inicial do rrweb falha em pagina instavel;
+   * record.takeFullSnapshot lanca antes do init pos-load) e a primeira
+   * ancora era o checkout +60s — o replay das sessoes de frustracao abria em
+   * branco. O watchdog pede a ancora ate ela passar de verdade pelo emit.
+   */
+  describe("snapshot watchdog", (): void => {
+    const sleep: (ms: number) => Promise<void> = (ms: number): Promise<void> => {
+      return new Promise<void>((resolve: () => void): void => {
+        setTimeout(resolve, ms);
+      });
+    };
+
+    it("forces a full snapshot when the drained pre-roll has none", async (): Promise<void> => {
+      const snapshotSpy: jest.SpyInstance = jest.spyOn(
+        record,
+        "takeFullSnapshot",
+      );
+
+      const instance: Recorder = startRecorder();
+
+      /*
+       * Em jsdom o init do rrweb ja populou o buffer com Meta+FullSnapshot.
+       * Esvaziar o buffer reproduz o caso de producao: pre-roll sem ancora.
+       */
+      (instance as unknown as { buffer: { clear: () => void } }).buffer.clear();
+
+      instance.trigger(SessionReplayTriggerReason.Manual);
+
+      /* A primeira tentativa do recovery e imediata (setTimeout 0). */
+      await sleep(20);
+
+      expect(snapshotSpy).toHaveBeenCalled();
+
+      /* A ancora real precisa alcancar o wire, nao so o spy. */
+      (instance as unknown as { onFlushTimer: () => void }).onFlushTimer();
+      await flushUploads();
+
+      const posts: Array<CapturedPost> = fetchMock.mock.calls.map(readPost);
+
+      expect(
+        posts.some((post: CapturedPost): boolean => {
+          return post.envelope.hasFullSnapshot;
+        }),
+      ).toBe(true);
+    });
+
+    it("does not schedule recovery when the pre-roll already has a snapshot", async (): Promise<void> => {
+      const snapshotSpy: jest.SpyInstance = jest.spyOn(
+        record,
+        "takeFullSnapshot",
+      );
+
+      const instance: Recorder = startRecorder();
+
+      instance.trigger(SessionReplayTriggerReason.Manual);
+      await sleep(20);
+
+      expect(snapshotSpy).not.toHaveBeenCalled();
+      expect(
+        (instance as unknown as { snapshotRecoveryTimer: unknown })
+          .snapshotRecoveryTimer,
+      ).toBeNull();
     });
   });
 });
