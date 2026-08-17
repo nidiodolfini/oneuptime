@@ -131,6 +131,7 @@ export function bootstrap(
   activeRecorder.start();
 
   drainCommandQueue();
+  installLiveCommandQueue();
 }
 
 export async function start(initOptions?: RecorderInitOptions): Promise<void> {
@@ -229,25 +230,59 @@ function drainCommandQueue(only?: ReadonlyArray<string>): void {
     }
 
     const command: unknown = entry[0];
-    const argument: unknown = entry[1];
 
     if (only && (typeof command !== "string" || !only.includes(command))) {
       remainder.push(entry);
       continue;
     }
 
-    if (command === "captureSession") {
-      captureSession();
-    } else if (command === "grantConsent") {
-      grantConsent();
-    } else if (command === "revokeConsent") {
-      revokeConsent();
-    } else if (command === "identify" && typeof argument === "string") {
-      identify(argument);
-    } else if (command === "stop") {
-      stop();
-    }
+    applyCommand(entry);
   }
 
   globalRecord[COMMAND_QUEUE_GLOBAL] = remainder;
+}
+
+function applyCommand(entry: unknown): void {
+  if (!Array.isArray(entry)) {
+    return;
+  }
+
+  const command: unknown = entry[0];
+  const argument: unknown = entry[1];
+
+  if (command === "captureSession") {
+    captureSession();
+  } else if (command === "grantConsent") {
+    grantConsent();
+  } else if (command === "revokeConsent") {
+    revokeConsent();
+  } else if (command === "identify" && typeof argument === "string") {
+    identify(argument);
+  } else if (command === "stop") {
+    stop();
+  }
+}
+
+/*
+ * PATCH medgrupo (12.0.6-medgrupo.4): fila VIVA depois do boot.
+ *
+ * O upstream so drenava a fila durante o bootstrap; um push tardio — o caso
+ * real e identify() depois que a sessao do usuario hidrata numa SPA —
+ * ficava parado no array para sempre, em silencio. Padrao gtag: apos o
+ * drain final o global vira um objeto cujo push aplica o comando na hora.
+ * Os drains de boot continuam seguros (Array.isArray ignora o objeto), e a
+ * pagina nao precisa saber em que fase o recorder esta: push funciona
+ * antes e depois do artefato carregar.
+ */
+function installLiveCommandQueue(): void {
+  const globalRecord: Record<string, unknown> = globalThis as unknown as Record<
+    string,
+    unknown
+  >;
+
+  globalRecord[COMMAND_QUEUE_GLOBAL] = {
+    push: (entry: unknown): void => {
+      applyCommand(entry);
+    },
+  };
 }

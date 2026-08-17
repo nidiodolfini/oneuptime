@@ -147,4 +147,58 @@ describe("Index bootstrap ordering", (): void => {
 
     index.stop();
   });
+
+  /*
+   * PATCH medgrupo (12.0.6-medgrupo.4): fila viva pos-boot. O upstream so
+   * drenava no bootstrap; um identify() empurrado depois que a sessao do
+   * usuario hidrata (o fluxo real de qualquer SPA logada) morria no array.
+   */
+  it("a push after boot is applied immediately and reaches the envelope meta", async (): Promise<void> => {
+    const index: typeof import("../src/Index") = await importIndex();
+
+    index.bootstrap(
+      INIT_OPTIONS,
+      { ...baseConfig(), captureUserIdentity: true },
+      [],
+    );
+
+    await tick();
+
+    /* O boot trocou o array por um objeto com push vivo. */
+    const queue: unknown = globalRecord["OneUptimeReplayQueue"];
+
+    expect(Array.isArray(queue)).toBe(false);
+    expect(typeof (queue as { push: unknown }).push).toBe("function");
+
+    (queue as { push: (entry: unknown) => void }).push([
+      "identify",
+      "aluno-42",
+    ]);
+
+    index.captureSession();
+
+    await tick();
+    await tick();
+
+    expect(fetchMock).toHaveBeenCalled();
+
+    const firstCall: Array<unknown> = fetchMock.mock.calls[0] as Array<unknown>;
+    const init: Record<string, unknown> = firstCall[1] as Record<
+      string,
+      unknown
+    >;
+    const text: string = new TextDecoder().decode(init["body"] as Uint8Array);
+    const envelope: Record<string, unknown> = JSON.parse(
+      text.slice(0, text.indexOf("\n")),
+    ) as Record<string, unknown>;
+    const meta: Record<string, unknown> = envelope["meta"] as Record<
+      string,
+      unknown
+    >;
+
+    expect(envelope["chunkIndex"]).toBe(0);
+    expect(meta["identifiedUserRef"]).toBe("aluno-42");
+
+    index.stop();
+  });
 });

@@ -7,6 +7,9 @@ import { isSessionErased } from "Common/Server/Utils/SessionReplay/SessionReplay
 import SessionReplayGateCache, {
   SessionReplayGatePolicy,
 } from "Common/Server/Utils/SessionReplay/SessionReplayGateCache";
+import SessionReplayUserIdentity, {
+  IdentifiedUser,
+} from "Common/Server/Utils/SessionReplay/SessionReplayUserIdentity";
 import TelemetryFanInWriter, {
   FanInSubmitResult,
   pushObservedAck,
@@ -955,6 +958,13 @@ export default class SessionReplayIngestService {
   }): JSONObject {
     const envelope: SessionReplayChunkEnvelope = data.envelope;
 
+    const identifiedUser: IdentifiedUser =
+      SessionReplayUserIdentity.buildIdentifiedUser({
+        projectId: data.projectId,
+        userRef: envelope.meta?.identifiedUserRef,
+        captureUserIdentity: data.policy.captureUserIdentity,
+      });
+
     const clientReportedStart: Date = Number.isFinite(
       envelope.sessionStartUnixMs,
     )
@@ -1047,13 +1057,17 @@ export default class SessionReplayIngestService {
        */
       countryCode: data.policy.captureGeo ? data.jobData.countryCode : "",
       /*
-       * identifiedUserKey / identifiedUserLabel are left empty here. The
-       * HMAC needs the per-project salt and the label needs its own column
-       * ACL, so both belong to the identity path rather than the hot ingest
-       * path.
+       * PATCH medgrupo (12.0.6-medgrupo.4): o "identity path" prometido no
+       * comentario original nunca foi escrito — o ref chegava no meta e
+       * morria aqui, com a lista eternamente "Anonymous". O header
+       * provisorio nasce no chunkIndex 0 e o meta do chunk 0 ja carrega o
+       * identify() feito no boot da pagina (fila drenada antes do primeiro
+       * chunk); identify tardio (apos o chunk 0) segue anonimo ate o
+       * proximo page load — limite documentado. O finalizer preserva o que
+       * for escrito aqui (FinalizeSessions resolve por argMax do header).
        */
-      identifiedUserKey: "",
-      identifiedUserLabel: "",
+      identifiedUserKey: identifiedUser.key,
+      identifiedUserLabel: identifiedUser.label,
       traceIds: envelope.traceIds ?? [],
       exceptionFingerprints: [],
       fidelityNotices: envelope.fidelityNotices,
