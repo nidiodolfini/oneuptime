@@ -585,3 +585,61 @@ quem baixou o recorder entre o flip (14/08 ~17h) e o rollout da .2 (15/08
 REGRA: todo build que tocar App/FeatureSet/BrowserRecorder/src deve bumpar
 `version` no App/FeatureSet/BrowserRecorder/package.json (ex.:
 12.0.6-medgrupo.2) — URL nova, zero colisao de cache.
+
+### 2026-10-12 — rebase 12.0.6-medgrupo.4 → 14.0.46 (branch `medgrupo/14.0.46-r1`, Community Edition)
+
+Motivacao: a UI mostrava VERSION/COMMIT `unknown` (imagens 12.x buildadas SEM
+`--build-arg APP_VERSION/GIT_SHA` — config OCI vazia) e 2 majors de atraso.
+
+**Layout novo**: desde 13.0.7 o codigo Node vive em `packages/` (rename puro,
+`04b19f7e`). Reaplicar os patches = `git format-patch 133b4522..medgrupo/12.0.6-r1
+-- App Common` + `git am -3 --directory=packages/ <patch>` (um a um; parar no
+conflito, decidir, `--continue`/`--skip`). `docs/medgrupo` virou `Docs/medgrupo`
+(upstream tem `Docs/` na raiz; no FS do Windows `docs/` e `Docs/` sao a MESMA
+pasta — manter os dois = index confuso). Triagem antes de cada conflito = grep
+no tree da 14 pelo equivalente (no clone parcial `git grep <tree>` NAO baixa
+blobs — grep no worktree).
+
+**Triagem dos 24 patches de codigo** (10 REAPLICADOS, 14 DROP):
+
+| # | Patch | Decisao | Prova |
+|---|---|---|---|
+| 0001 | Slack: acoes MANUAIS de incident nao postam | REAPLICA (conflito: `mdText` novo; mantido upstream + `userId`) | — |
+| 0002 | `isRoot` em operacoes de fundo (abr) | DROP | os 6 call-sites nao existem mais; `MonitorService` ja tem `isRoot` |
+| 0003 | ProcessTelemetry stalled-job guard | REAPLICA (limpo) | upstream cita "stalled-job recovery"; vigiar duplicidade |
+| 0004/0019 | Pyroscope `application/proto` (parser + dispatch) | DROP | `StartServer.ts:221-223` lista o tipo; `PyroscopeIngestService.ts:540` responde proto |
+| 0005-0007 | TraceIdHex (Buffer → hex) | DROP | `Span.traceId` e `TableColumnType.Text`; UI upstream faz `span.traceId.toString()` |
+| 0008 | BaseModelTable dropdown limit | REAPLICA (limpo) | cosmetico |
+| 0009 | Login com Keycloak + EditionLabel stub | Login REAPLICADO a mao (footer do form reestruturado); **EditionLabel DROP** (14 tem pill/dialog de edicao) | `Login.tsx:1218` |
+| 0010 | SSO: so memberships aceitas + `SSO_DEFAULT_PROJECT_IDS` | REAPLICA (limpo) — critico | `OIDC.ts` ainda conta todas as memberships |
+| 0011 | chunking Slack 3000 | DROP | `Slack.ts:171 SECTION_TEXT_MAX_LENGTH=3000` + split nativo |
+| 0012/0014 | estado INICIAL nao posta (Incident/Alert) | REAPLICA (limpo) | `WorkspaceStateChangePosting` so existe no master pos-14.0.46 |
+| 0013/0014 | notas privadas nao espelham | REAPLICA (limpo) | upstream `sendWorkspaceNotification: true` |
+| 0015/0020 | bells + reminders de owners | REAPLICA (limpo) | idem |
+| 0016/0018 | TracesViewer/LogsViewer resolvem RumApplication | DROP (aplicavam limpo, mas duplicavam) | 14 ja resolve RumApplication nos 2 viewers (`useTelemetryEntityNames` + lookup proprio em `TracesViewer.tsx:500,723` / `LogsViewer.tsx:550,618`) |
+| 0017 | RUM Metrics via entity key | DROP | upstream usa `scopeEntityType=RealUserMonitor` (comentario PT do fork ja esta la) |
+| 0021 | `useServiceNames` resolve RumApplication | DROP | 14: wrapper de `useTelemetryEntityNames`, restrito a Service DE PROPOSITO |
+| 0022-0024 | BrowserRecorder (oversized, replay, identify) + bumps | DROP | upstream tem `SessionId.ts`, `emitOversizedEvent`, `identify`, `SessionReplayIdentity.ts`; `version` do recorder = versao do app (sem bump manual) |
+
+**Edicao**: a 14 separa Community (`--target community`, Apache-2.0, **inclui
+SAML/OIDC/SSO global**) e Enterprise (licenca checada no boot). Buildamos
+Community. `IS_ENTERPRISE_EDITION=true` numa imagem Community **recusa o boot**
+(`packages/App/Utils/EnterpriseLoader.ts:372`) → chart passa a `false`
+(decisao do dono 12/10). O flag nao liga mais nada.
+
+**Build (receita 14)**: gomplate em container → `packages/App/Dockerfile`;
+`docker build -f packages/App/Dockerfile --target community --build-arg
+GIT_SHA=$(git rev-parse HEAD) --build-arg APP_VERSION=<tag> -t
+ghcr.io/nidiodolfini/oneuptime-app:<tag> .` (contexto = raiz). Probe:
+`packages/Probe/Dockerfile.tpl`, mesmos build-args, sem `--target`. Conferir
+`docker inspect` → `APP_VERSION`/`GIT_SHA` preenchidos e `IS_ENTERPRISE_EDITION=false`;
+`/api/version` na UI mostra os dois. Gate = `npm run compile` dentro do build.
+
+**Chart (gitops)**: `PROBE_ALLOW_PRIVATE_NETWORK_MONITORS=true` nos probes
+(default `false` recusa alvo RFC-1918 — nossos hosts resolvem privado);
+`PRIVATE_NETWORK_WEBHOOK_ALLOWLIST`/`ALLOW_PRIVATE_NETWORK_WEBHOOKS` para o
+Workflow chamar o holmes-bridge (svc interno); `TRUSTED_PROXY_HOPS` (XFF do
+gateway). Redis segue (`REDIS_*` e fallback de `VALKEY_*`). ClickHouse: sem
+migracao (contrato `ClusterConfig.ts` identico). Postgres: 166 schema + 36 data
+migrations; `MigrateIncidentFormsToForms` dropa `IncidentForm*` (nao usamos);
+rollback = dump `pg_dump -Fc` antes.
