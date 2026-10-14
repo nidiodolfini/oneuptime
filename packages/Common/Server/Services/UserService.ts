@@ -61,6 +61,7 @@ import { getPasswordValidationError } from "../../Types/Password";
 import UserAuthenticationStatus from "../../Types/UserAuthenticationStatus";
 import TwoFactorAuthStatus from "../../Types/TwoFactorAuthStatus";
 import Name from "../../Types/Name";
+import ColumnLength from "../../Types/Database/ColumnLength";
 import CaptureSpan from "../Utils/Telemetry/CaptureSpan";
 import Timezone from "../../Types/Timezone";
 import InMemoryTTLCache from "../Infrastructure/InMemoryTTLCache";
@@ -1022,7 +1023,17 @@ export class Service extends DatabaseService<Model> {
     const user: Model = new Model();
     user.email = email;
     if (data.name) {
-      user.name = data.name;
+      /*
+       * Medgrupo: o nome vem do IdP (claim `name` do OIDC/SAML) e pode passar
+       * da coluna User.name (50). No Keycloak da Medgrupo os mappers LDAP
+       * `full name` (cn) + `last name` (sn) repetem os nomes do meio — 206 de
+       * 1837 usuarios passam de 50 (ate 86) — e o 1o login morria com "name
+       * length cannot be more than 50 characters". Corta aqui: OIDC, SAML,
+       * SSO global e convite criam o usuario por este metodo.
+       */
+      user.name = new Name(
+        data.name.toString().substring(0, ColumnLength.Name).trim(),
+      );
     }
     user.isEmailVerified = data.isEmailVerified || false;
 
