@@ -92,6 +92,16 @@ const KNOWN_CUMULATIVE_COUNTERS: Array<string> = [
  */
 const KNOWN_GAUGES: Array<string> = [
   "postgresql.backends",
+  // Medgrupo (2026-10-20): CloudWatch via alloy-databases, niveis.
+  "postgresql.cpu.utilization",
+  "postgresql.memory.free",
+  "postgresql.capacity",
+  "postgresql.capacity.utilization",
+  "mongodb.cpu.utilization",
+  "mongodb.memory.free",
+  "mongodb.capacity",
+  "mongodb.capacity.utilization",
+  "redis.capacity",
   "postgresql.connection.max",
   "postgresql.db_size",
   "redis.commands",
@@ -168,6 +178,16 @@ const RECEIVER_DATAPOINT_ATTRIBUTES: Record<string, Array<string>> = {
   "postgresql.rollbacks": ["db.namespace"],
   "postgresql.db_size": ["db.namespace"],
   "postgresql.replication.data_delay": ["replication_client"],
+  // Medgrupo (2026-10-20): o alloy-databases manda WRITER e READER como
+  // series distintas; cada entrada tem de dizer o que faz com `role`.
+  "postgresql.cpu.utilization": ["role"],
+  "postgresql.memory.free": ["role"],
+  "postgresql.capacity": ["role"],
+  "postgresql.capacity.utilization": ["role"],
+  "mongodb.cpu.utilization": ["role"],
+  "mongodb.memory.free": ["role"],
+  "mongodb.capacity": ["role"],
+  "mongodb.capacity.utilization": ["role"],
   "mysql.threads": ["kind"],
   "mysql.buffer_pool.usage": ["status"],
   "mysql.handlers": ["kind"],
@@ -349,12 +369,43 @@ function entriesNamed(name: string): Array<DatabaseServerMetricDefinition> {
   );
 }
 
+/*
+ * Medgrupo (2026-10-20): tiles de CPU, memoria livre e capacidade de bancos
+ * gerenciados (CloudWatch via alloy-databases). Ficam fora da conta de 5-8
+ * do upstream: so aparecem onde chega dado (DatabaseEngineMetricsSection
+ * esconde tile sem serie), entao um banco sem CloudWatch segue com os 5-8.
+ */
+const MEDGRUPO_CLOUDWATCH_METRICS: Array<string> = [
+  "postgresql.cpu.utilization",
+  "postgresql.memory.free",
+  "postgresql.capacity",
+  "postgresql.capacity.utilization",
+  "mongodb.cpu.utilization",
+  "mongodb.memory.free",
+  "mongodb.capacity",
+  "mongodb.capacity.utilization",
+  "redis.capacity",
+];
+
 describe("DATABASE_SERVER_METRICS", () => {
   test.each(CURATED_SYSTEMS)("%s has 5-8 curated metrics", (system: string) => {
-    const count: number = getDatabaseServerMetrics(system).length;
+    const count: number = getDatabaseServerMetrics(system).filter(
+      (metric: DatabaseServerMetricDefinition): boolean => {
+        return !MEDGRUPO_CLOUDWATCH_METRICS.includes(metric.metricName);
+      },
+    ).length;
     expect(count).toBeGreaterThanOrEqual(5);
     expect(count).toBeLessThanOrEqual(8);
   });
+
+  test.each(MEDGRUPO_CLOUDWATCH_METRICS)(
+    "%s (Medgrupo, CloudWatch) is a curated gauge of its engine",
+    (name: string) => {
+      const metric: DatabaseServerMetricDefinition = metricByName(name);
+      expect(metric.kind).toBe("gauge");
+      expect(name.startsWith(metric.system + ".")).toBe(true);
+    },
+  );
 
   test("only the curated engines have entries", () => {
     const systems: Set<string> = new Set<string>(

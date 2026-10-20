@@ -218,6 +218,65 @@ export const DATABASE_SERVER_METRICS: ReadonlyArray<DatabaseServerMetricDefiniti
       kind: "gauge",
       seriesCombine: "max",
     },
+    /*
+     * Medgrupo (2026-10-20): CPU, memoria livre e capacidade de bancos
+     * GERENCIADOS, que o receiver postgresql nao tem. Chegam do CloudWatch
+     * pelo alloy-databases (bloco `oneuptime_databases` do gitops-platform),
+     * uma serie por papel (`role` = WRITER/READER) e com a % ja em fracao
+     * 0..1. Nomes com o prefixo do engine porque este catalogo so aceita
+     * assim. Tile sem dado nao aparece (DatabaseEngineMetricsSection filtra
+     * `series.length > 0`), entao um Postgres sem essas series nao muda.
+     * Aurora Serverless v2: a CPU e a % do tamanho ATUAL, que escala — o
+     * teto de verdade e `capacity.utilization` (ACUUtilization).
+     */
+    {
+      system: "postgresql",
+      metricName: "postgresql.cpu.utilization",
+      title: "CPU",
+      description:
+        "Share of the instance's vCPUs in use, from the cloud provider's monitoring (Amazon CloudWatch CPUUtilization): the busiest role, writer or reader. On Aurora Serverless v2 the vCPUs scale with the ACUs, so read it next to Capacity utilization.",
+      unit: "fraction",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "max",
+    },
+    {
+      system: "postgresql",
+      metricName: "postgresql.memory.free",
+      title: "Free memory",
+      description:
+        "Memory still available on the instance (CloudWatch FreeableMemory): the role with the least of it.",
+      unit: "bytes",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "min",
+    },
+    {
+      system: "postgresql",
+      metricName: "postgresql.capacity",
+      title: "Capacity",
+      description:
+        "Capacity units in use (Aurora Serverless v2 ACUs, CloudWatch ServerlessDatabaseCapacity): the role using the most.",
+      unit: "ACU",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "max",
+    },
+    {
+      system: "postgresql",
+      metricName: "postgresql.capacity.utilization",
+      title: "Capacity utilization",
+      description:
+        "Share of the maximum capacity in use (Aurora Serverless v2 ACUUtilization): the role closest to the ceiling. At 100% the cluster cannot scale any further.",
+      unit: "fraction",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "max",
+    },
 
     // MySQL / MariaDB — mysqlreceiver (default-on subset).
     {
@@ -409,6 +468,24 @@ export const DATABASE_SERVER_METRICS: ReadonlyArray<DatabaseServerMetricDefiniti
       kind: "counter",
       seriesCombine: "sum",
     },
+    /*
+     * Medgrupo (2026-10-20): capacidade de cache GERENCIADO (ElastiCache
+     * serverless), que nao publica CPU %: ElastiCacheProcessingUnits do
+     * CloudWatch, Sum de 5 min ja dividida por 300 no alloy-databases. Vem
+     * sem papel (uma serie). Memoria ja e `redis.memory.used`. Tile some
+     * onde nao chega dado (mesma razao do bloco postgresql acima).
+     */
+    {
+      system: "redis",
+      metricName: "redis.capacity",
+      title: "Processing units",
+      description:
+        "ElastiCache processing units consumed per second (CloudWatch ElastiCacheProcessingUnits), the serverless cache's measure of CPU work. Compare with the cache's configured ECPU/s limit.",
+      unit: "ECPU/s",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesCombine: "max",
+    },
 
     /*
      * MongoDB — mongodbreceiver (all default-on). It reads serverStatus once
@@ -491,6 +568,61 @@ export const DATABASE_SERVER_METRICS: ReadonlyArray<DatabaseServerMetricDefiniti
       aggregation: AggregationType.Max,
       kind: "counter",
       seriesCombine: "sum",
+    },
+    /*
+     * Medgrupo (2026-10-20): CPU, memoria livre e capacidade de bancos
+     * GERENCIADOS (Amazon DocumentDB, familia mongodb), do CloudWatch pelo
+     * alloy-databases — mesmo desenho do bloco postgresql acima: uma serie
+     * por papel (`role`), % em fracao, tile some onde nao chega dado.
+     * DocumentDB serverless: capacidade em DCU e DCUUtilization.
+     */
+    {
+      system: "mongodb",
+      metricName: "mongodb.cpu.utilization",
+      title: "CPU",
+      description:
+        "Share of the instance's vCPUs in use, from the cloud provider's monitoring (Amazon CloudWatch CPUUtilization): the busiest role, writer or reader. On a serverless cluster the vCPUs scale with the capacity units, so read it next to Capacity utilization.",
+      unit: "fraction",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "max",
+    },
+    {
+      system: "mongodb",
+      metricName: "mongodb.memory.free",
+      title: "Free memory",
+      description:
+        "Memory still available on the instance (CloudWatch FreeableMemory): the role with the least of it.",
+      unit: "bytes",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "min",
+    },
+    {
+      system: "mongodb",
+      metricName: "mongodb.capacity",
+      title: "Capacity",
+      description:
+        "Capacity units in use (Amazon DocumentDB serverless DCUs, CloudWatch ServerlessDatabaseCapacity): the role using the most.",
+      unit: "DCU",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "max",
+    },
+    {
+      system: "mongodb",
+      metricName: "mongodb.capacity.utilization",
+      title: "Capacity utilization",
+      description:
+        "Share of the maximum capacity in use (Amazon DocumentDB serverless DCUUtilization): the role closest to the ceiling. At 100% the cluster cannot scale any further.",
+      unit: "fraction",
+      aggregation: AggregationType.Avg,
+      kind: "gauge",
+      seriesKeys: ["role"],
+      seriesCombine: "max",
     },
 
     /*
