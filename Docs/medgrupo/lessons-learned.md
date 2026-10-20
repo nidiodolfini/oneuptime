@@ -643,3 +643,34 @@ gateway). Redis segue (`REDIS_*` e fallback de `VALKEY_*`). ClickHouse: sem
 migracao (contrato `ClusterConfig.ts` identico). Postgres: 166 schema + 36 data
 migrations; `MigrateIncidentFormsToForms` dropa `IncidentForm*` (nao usamos);
 rollback = dump `pg_dump -Fc` antes.
+
+## 2026-10-20 — tag `.3`: tiles de CPU, memória livre e capacidade (CloudWatch) na Databases
+
+**Pedido**: ver CPU e memória dos bancos gerenciados do MedSoft-Prod (Aurora Sv2,
+DocumentDB serverless, Valkey serverless) na página Resources → Databases.
+
+**Por que patch e não só coletor**: a Overview da 14.0.46 tem 3 seções —
+Queries (traces), *Runtime* (CPU/memória **só** para banco em Kubernetes/
+Docker/Podman: `getDatabaseRuntimePlatform` devolve `null` para banco
+gerenciado, daí "Runs on: —") e *Engine metrics* (catálogo por engine,
+`Common/Types/DatabaseServer/DatabaseServerMetricCatalog.ts`). A aba
+**Metrics** já lista qualquer métrica que chegue com a identidade do banco,
+sem patch; tile na Overview exige entrada no catálogo.
+
+**Patch (App apenas, probe segue na `.1`)**: 9 entradas no catálogo —
+`postgresql.{cpu.utilization,memory.free,capacity,capacity.utilization}`,
+idem `mongodb.*`, e `redis.capacity` (ECPU/s). Nomes com o prefixo do engine
+porque o teste `every metric carries its engine's receiver prefix` exige;
+`seriesKeys: ["role"]` + `seriesCombine` max/min (pior papel); `fraction`
+0..1 (o alloy-databases divide a % do CloudWatch por 100). Tile sem dado é
+escondido por `DatabaseEngineMetricsSection` (`series.length > 0`), então
+Postgres/Mongo/Redis sem essas séries não mudam. Teste do catálogo: listas
+`KNOWN_GAUGES` e `RECEIVER_DATAPOINT_ATTRIBUTES` ganharam os nomes.
+
+**Fonte dos dados**: gitops-platform PR #1415 (`alloy-databases`, bloco
+`oneuptime_databases`, só MedSoft-Prod). Documentação do contrato de nomes:
+`docs/oneuptime.md` §Databases do gitops-platform.
+
+**Build**: receita da `.2` (branch `medgrupo/14.0.46-r1`, `--target community`,
+`--build-arg GIT_SHA/APP_VERSION`), conferir o patch dentro da imagem em
+`/usr/src/Common/Types/DatabaseServer/DatabaseServerMetricCatalog.ts`.
