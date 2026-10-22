@@ -225,6 +225,12 @@ export const BillingWebhookSecret: string = BillingConfig.BillingWebhookSecret;
 export const SSODefaultProjectIds: string =
   process.env["SSO_DEFAULT_PROJECT_IDS"] || "";
 
+// Medgrupo: idioma em que a IA escreve (investigacao, chat, TL;DR), ex.
+// "Brazilian Portuguese (pt-BR)". Vazio = comportamento upstream (ingles).
+export const AiResponseLanguage: string = (
+  process.env["AI_RESPONSE_LANGUAGE"] || ""
+).trim();
+
 export const DatabaseHost: Hostname = Hostname.fromString(
   process.env["DATABASE_HOST"] || "postgres",
 );

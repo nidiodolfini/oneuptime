@@ -3,6 +3,7 @@ import AIService, {
   AILogResponse,
   AI_INVESTIGATION_TLDR_FEATURE,
 } from "../../../Services/AIService";
+import { AiResponseLanguage } from "../../../EnvironmentConfig";
 import logger from "../../Logger";
 import CaptureSpan from "../../Telemetry/CaptureSpan";
 
@@ -302,6 +303,10 @@ export default class InvestigationTldr {
                 "If the analysis did not determine a cause, say that plainly instead of guessing one.",
                 "Add no facts that are not in the analysis, and never claim anything was changed or fixed.",
                 "Use plain text only: no markdown, no headings, no bullet points, no citation markers, and no 'TL;DR' prefix.",
+                // Medgrupo: AI_RESPONSE_LANGUAGE (same rule as the chat prompt).
+                ...(AiResponseLanguage
+                  ? [`Write the TL;DR in ${AiResponseLanguage}.`]
+                  : []),
                 `Stay under ${MAX_TLDR_CHARS} characters.`,
               ].join("\n"),
             },

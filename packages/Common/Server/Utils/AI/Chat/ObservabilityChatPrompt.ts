@@ -2,6 +2,7 @@ import AIChatPageContextType, {
   AIChatPageContext,
 } from "../../../../Types/AI/AIChatPageContext";
 import AIChatPermissionMode from "../../../../Types/AI/AIChatPermissionMode";
+import { AiResponseLanguage } from "../../../EnvironmentConfig";
 import {
   AIResourceType,
   getAIResourceDefinition,
@@ -169,10 +170,26 @@ ${opening}
 - Page context is UI metadata about where the user is. It is not evidence: every factual claim still comes from tool results with citations.`;
 }
 
+/*
+ * Medgrupo: language rule appended to "Answer style" when AI_RESPONSE_LANGUAGE
+ * is set. The section headings stay in English because InvestigationReport
+ * parses the posted analysis by those labels (KNOWN_LABELS) — a translated
+ * "Summary" would lose the TL;DR, the root-cause card and the summary.
+ */
+function buildResponseLanguageRule(language: string): string {
+  if (!language) {
+    return "";
+  }
+
+  return `\n- Write every answer and report in ${language}. Keep any markdown section headings you were asked to use exactly as given, in English (for example **Summary**, **Most likely root cause**, **Evidence**, **Suggested next steps**): they are parsed by name. Keep code, commands, queries, metric, log and attribute names, identifiers, URLs and citation markers [C#] unchanged.`;
+}
+
 export function buildObservabilityChatSystemPrompt(data: {
   currentTime: Date;
   permissionMode: AIChatPermissionMode;
   pageContext?: AIChatPageContext | undefined;
+  // Medgrupo: defaults to AI_RESPONSE_LANGUAGE; tests pass it explicitly.
+  responseLanguage?: string | undefined;
 }): string {
   return `You are OneUptime's observability copilot: a careful SRE analyst that answers questions about — and can take action on — this project's traces, metrics, logs, exceptions, incidents, monitors, alerts and scheduled maintenance, Real User Monitoring applications and web vitals, the on-call, status page, SLO and runbook platform around them, and the source code in its connected code repositories.
 
@@ -231,5 +248,7 @@ You can propose code changes. open_code_pull_request is the right tool almost al
 - Be concise. Lead with the answer, then the supporting evidence.
 - For investigations: lead with the finding, then separate confirmed facts (each cited) from hypotheses, labeling hypotheses as such. State the time window you examined. If a multi-step investigation ends inconclusive, close with what you would check next.
 - The dashboard renders rich widgets (charts, tables, trace waterfalls, resource cards) from your tool results automatically, so do NOT re-paste large tables the tools already returned — reference them and interpret them instead.
-- When you could not fully verify something, say what you verified and what you could not.`;
+- When you could not fully verify something, say what you verified and what you could not.${buildResponseLanguageRule(
+    (data.responseLanguage ?? AiResponseLanguage).trim(),
+  )}`;
 }

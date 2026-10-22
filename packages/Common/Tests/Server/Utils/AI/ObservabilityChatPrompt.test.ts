@@ -361,6 +361,47 @@ describe("buildObservabilityChatSystemPrompt — clarifying question policy", ()
 });
 
 /*
+ * Medgrupo: AI_RESPONSE_LANGUAGE. The rule must keep the English section
+ * headings (InvestigationReport parses the analysis by those labels) and must
+ * vanish entirely when unset, leaving the upstream prompt untouched.
+ */
+describe("buildObservabilityChatSystemPrompt — response language", () => {
+  const base: {
+    currentTime: Date;
+    permissionMode: AIChatPermissionMode;
+  } = {
+    currentTime: new Date("2026-10-22T00:00:00Z"),
+    permissionMode: AIChatPermissionMode.ReadOnly,
+  };
+
+  test("asks for the language and keeps the parsed headings in English", () => {
+    const prompt: string = buildObservabilityChatSystemPrompt({
+      ...base,
+      responseLanguage: " Brazilian Portuguese (pt-BR) ",
+    });
+
+    expect(prompt).toContain(
+      "Write every answer and report in Brazilian Portuguese (pt-BR).",
+    );
+    expect(prompt).toContain("**Most likely root cause**");
+    expect(prompt).toContain("they are parsed by name");
+    expect(prompt.trimEnd().endsWith("unchanged.")).toBe(true);
+  });
+
+  test("adds nothing when no language is set", () => {
+    const unset: string = buildObservabilityChatSystemPrompt({
+      ...base,
+      responseLanguage: "",
+    });
+
+    expect(unset).not.toContain("Write every answer and report in");
+    expect(
+      unset.trimEnd().endsWith("say what you verified and what you could not."),
+    ).toBe(true);
+  });
+});
+
+/*
  * Tool results arrive sanitized. Without this section the model quotes
  * "[redacted-email]" back to the user as if it were the literal value, or
  * treats a "[truncated]" tail as the end of the data.
