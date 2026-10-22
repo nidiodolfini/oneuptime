@@ -2,6 +2,7 @@ import AIChatPageContextType, {
   AIChatPageContext,
 } from "../../../../Types/AI/AIChatPageContext";
 import AIChatPermissionMode from "../../../../Types/AI/AIChatPermissionMode";
+import { AiResponseLanguage } from "../../../EnvironmentConfig";
 import {
   AIResourceType,
   getAIResourceDefinition,
@@ -394,6 +395,20 @@ ${opening}
 - Page context is UI metadata about where the user is. It is not evidence: every factual claim still comes from tool results with citations.`;
 }
 
+/*
+ * Medgrupo: language rule appended to "Answer style" when AI_RESPONSE_LANGUAGE
+ * is set. The section headings stay in English because InvestigationReport
+ * parses the posted analysis by those labels (KNOWN_LABELS) — a translated
+ * "Summary" would lose the TL;DR, the root-cause card and the summary.
+ */
+function buildResponseLanguageRule(language: string): string {
+  if (!language) {
+    return "";
+  }
+
+  return `\n- Write every answer and report in ${language}. Keep any markdown section headings you were asked to use exactly as given, in English (for example **Summary**, **Most likely root cause**, **Evidence**, **Suggested next steps**): they are parsed by name. Keep code, commands, queries, metric, log and attribute names, identifiers, URLs and citation markers [C#] unchanged.`;
+}
+
 export function buildObservabilityChatSystemPrompt(data: {
   currentTime: Date;
   permissionMode: AIChatPermissionMode;
@@ -402,6 +417,8 @@ export function buildObservabilityChatSystemPrompt(data: {
   surface?: ObservabilityChatSurface | undefined;
   // Slack or Microsoft Teams, when the answer is read there.
   chatApp?: ObservabilityChatApp | undefined;
+  // Medgrupo: defaults to AI_RESPONSE_LANGUAGE; tests pass it explicitly.
+  responseLanguage?: string | undefined;
 }): string {
   const surface: ObservabilityChatSurface = data.chatApp
     ? ObservabilityChatSurface.ChatApp
@@ -468,5 +485,7 @@ You can propose code changes. open_code_pull_request is the right tool almost al
 
 ## Answer style
 
-${ANSWER_STYLE_SECTION}`;
+${ANSWER_STYLE_SECTION}${buildResponseLanguageRule(
+    (data.responseLanguage ?? AiResponseLanguage).trim(),
+  )}`;
 }
