@@ -674,3 +674,31 @@ Postgres/Mongo/Redis sem essas séries não mudam. Teste do catálogo: listas
 **Build**: receita da `.2` (branch `medgrupo/14.0.46-r1`, `--target community`,
 `--build-arg GIT_SHA/APP_VERSION`), conferir o patch dentro da imagem em
 `/usr/src/Common/Types/DatabaseServer/DatabaseServerMetricCatalog.ts`.
+
+## 2026-10-22 — tag `.4`: `AI_RESPONSE_LANGUAGE` (IA do OneUptime em pt-BR)
+
+**Pedido**: a IA nativa (investigação automática de alerta/incidente, chat "Ask
+OneUptime AI", perguntas pelo Slack e o TL;DR) responder em português do Brasil
+no project MedSoft-Prod. Nem a 14.0.46 nem o upstream até a 14.0.85 têm
+opção de idioma: os prompts são fixos em inglês. Pôr o pedido no texto do alerta
+(holmes-bridge) não serve — o OneUptime enquadra o sinal como dado não confiável.
+
+**Patch (App apenas, probe segue na `.1`)**: env `AI_RESPONSE_LANGUAGE`
+(`EnvironmentConfig.AiResponseLanguage`, ex. `Brazilian Portuguese (pt-BR)`;
+vazio = upstream). `buildObservabilityChatSystemPrompt` (único builder do chat
+e do `ObservabilityAssistant`, que é por onde passa a investigação) ganha uma
+regra no fim do "Answer style"; o `InvestigationTldr` ganha uma linha.
+**Os títulos de seção ficam em inglês de propósito**: `InvestigationReport`
+(`KNOWN_LABELS`) parseia a análise por "Summary"/"Most likely root cause"/
+"Evidence"/"Suggested next steps" — título traduzido perde TL;DR, card de causa
+raiz e resumo. Classificador de confiança e grader não mudam (saída é rótulo).
+Teste: 2 casos novos em `ObservabilityChatPrompt.test.ts` (com e sem idioma),
+provados por mutação.
+
+**Rodar teste sem `npm install` num worktree**: criar o worktree DENTRO de
+`packages/Common/` do clone principal (o Node acha o `node_modules` subindo
+diretórios) e passar `--config` com o `jest.config.json` cujo
+`moduleNameMapper` `<rootDir>/node_modules` aponta para o do clone principal.
+Nunca junction/symlink pro `node_modules` (remover worktree com `--force` segue
+o link). Mutação em arquivo NÃO commitado: reverter com o inverso do `sed`,
+nunca `git checkout -- arquivo` (apaga o patch junto).
