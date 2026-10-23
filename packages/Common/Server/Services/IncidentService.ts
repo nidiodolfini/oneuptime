@@ -5245,12 +5245,13 @@ ${FeedMarkdown.asMarkdown(incident.remediationNotes || "No remediation notes pro
         userId: data.userId,
         apiKeyActor: data.apiKeyActor,
         /*
-         * Posted as it reads, opening with its heading: a name in front of
-         * "Postmortem Note updated for Incident INC-18" is no sentence. The
-         * feed names who wrote or cleared it.
+         * Medgrupo: the postmortem lives in the incident (feed, Postmortem
+         * page, status page once published) and is not mirrored into the
+         * Slack/Teams incident channel - like private notes since
+         * 11.0.3-medgrupo.3. Upstream posts the whole note on every change.
          */
         workspaceNotification: {
-          sendWorkspaceNotification: true,
+          sendWorkspaceNotification: false,
         },
       });
     }
