@@ -17,6 +17,7 @@ import OneUptimeDate from "../../../Types/Date";
 import SortOrder from "../../../Types/BaseDatabase/SortOrder";
 import { LLMMessage } from "../LLM/LLMService";
 import PromptText from "../../../Utils/AI/PromptText";
+import { AiResponseLanguage } from "../../EnvironmentConfig";
 import NotificationRuleWorkspaceChannel from "../../../Types/Workspace/NotificationRules/NotificationRuleWorkspaceChannel";
 import WorkspaceType from "../../../Types/Workspace/WorkspaceType";
 import CallSummaryContext, {
@@ -44,6 +45,32 @@ export interface AIGenerationContext {
   contextText: string;
   systemPrompt: string;
   messages: Array<LLMMessage>;
+}
+
+/*
+ * Medgrupo: AI_RESPONSE_LANGUAGE for the postmortem prompts (incident and
+ * episode), the same env the chat prompt and the TL;DR read. Nothing parses a
+ * postmortem by its headings, so without a template the whole document -
+ * headings included - is written in the language; with a template the model
+ * is already told to fill only the template, so the template's headings stay
+ * exactly as the team wrote them and only the content is written in the
+ * language. Empty = upstream prompt, untouched.
+ */
+export function buildPostmortemLanguageRule(data: {
+  language: string;
+  hasTemplate: boolean;
+}): string {
+  const language: string = data.language.trim();
+
+  if (!language) {
+    return "";
+  }
+
+  if (data.hasTemplate) {
+    return `\n- Write the content of every section in ${language}. Keep the template's headings, labels and table structure exactly as given. Keep code, commands, queries, metric, log and attribute names, identifiers and URLs unchanged.`;
+  }
+
+  return `\n\nWrite the entire postmortem, section headings included, in ${language}. Keep code, commands, queries, metric, log and attribute names, identifiers and URLs unchanged.`;
 }
 
 export default class IncidentAIContextBuilder {
@@ -275,6 +302,8 @@ export default class IncidentAIContextBuilder {
      * places it. Left out, or null: the prompt as it always was.
      */
     aiContext?: AiContextActivity | null | undefined,
+    // Medgrupo: defaults to AI_RESPONSE_LANGUAGE; tests pass it explicitly.
+    responseLanguage: string = AiResponseLanguage,
   ): AIGenerationContext {
     const {
       incident,
@@ -436,7 +465,7 @@ CRITICAL INSTRUCTIONS:
 - If a section in the template has no relevant data, write "No data available" or leave the placeholder text
 - A root cause marked as suggested by AI and not confirmed by a responder is a hypothesis: say so, and never present it as the confirmed cause
 - Be blameless - focus on systemic improvements rather than individual blame
-- Write in a professional, clear, and concise manner
+- Write in a professional, clear, and concise manner${buildPostmortemLanguageRule({ language: responseLanguage, hasTemplate: true })}
 
 TEMPLATE TO FILL (use this exact structure):
 
@@ -462,7 +491,7 @@ Grounding rules (important):
 - Use ONLY facts that appear in the provided incident data. Do NOT invent root causes, timelines, metrics, customer impact, or actions the data does not support.
 - If a section needs information the data does not contain, write "Not available in the incident record" instead of guessing.
 - A root cause marked as suggested by AI and not confirmed by a responder is a hypothesis: say so, and never present it as the confirmed cause.
-- Never fabricate numbers or state confidence levels.`;
+- Never fabricate numbers or state confidence levels.${buildPostmortemLanguageRule({ language: responseLanguage, hasTemplate: false })}`;
     }
 
     // The project's AI context, first: the team's notes on its systems.
