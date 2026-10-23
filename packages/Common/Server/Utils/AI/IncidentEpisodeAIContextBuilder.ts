@@ -18,7 +18,11 @@ import { LLMMessage } from "../LLM/LLMService";
 import PromptText from "../../../Utils/AI/PromptText";
 import NotificationRuleWorkspaceChannel from "../../../Types/Workspace/NotificationRules/NotificationRuleWorkspaceChannel";
 import WorkspaceType from "../../../Types/Workspace/WorkspaceType";
-import { AIGenerationContext } from "./IncidentAIContextBuilder";
+import {
+  AIGenerationContext,
+  buildPostmortemLanguageRule,
+} from "./IncidentAIContextBuilder";
+import { AiResponseLanguage } from "../../EnvironmentConfig";
 import Incident from "../../../Models/DatabaseModels/Incident";
 
 export interface IncidentEpisodeContextData {
@@ -220,6 +224,8 @@ export default class IncidentEpisodeAIContextBuilder {
   public static formatEpisodeContextForPostmortem(
     contextData: IncidentEpisodeContextData,
     template?: string,
+    // Medgrupo: defaults to AI_RESPONSE_LANGUAGE; tests pass it explicitly.
+    responseLanguage: string = AiResponseLanguage,
   ): AIGenerationContext {
     const {
       episode,
@@ -368,7 +374,7 @@ CRITICAL INSTRUCTIONS:
 - If a section in the template has no relevant data, write "No data available" or leave the placeholder text
 - Be blameless - focus on systemic improvements rather than individual blame
 - Write in a professional, clear, and concise manner
-- Consider all member incidents when analyzing root cause and impact
+- Consider all member incidents when analyzing root cause and impact${buildPostmortemLanguageRule({ language: responseLanguage, hasTemplate: true })}
 
 TEMPLATE TO FILL (use this exact structure):
 
@@ -395,7 +401,7 @@ Write in a professional, clear, and concise manner. Use markdown formatting for 
 Grounding rules (important):
 - Use ONLY facts that appear in the provided episode data. Do NOT invent root causes, timelines, metrics, impact, or actions the data does not support.
 - If a section needs information the data does not contain, write "Not available in the incident record" instead of guessing.
-- Never fabricate numbers or state confidence levels.`;
+- Never fabricate numbers or state confidence levels.${buildPostmortemLanguageRule({ language: responseLanguage, hasTemplate: false })}`;
     }
 
     // Build user message based on whether template is provided

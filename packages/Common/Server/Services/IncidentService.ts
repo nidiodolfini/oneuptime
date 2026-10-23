@@ -4764,8 +4764,14 @@ ${FeedMarkdown.asMarkdown(incident.remediationNotes || "No remediation notes pro
         displayColor: Blue500,
         feedInfoInMarkdown: postmortemFeedMarkdown,
         userId: data.userId,
+        /*
+         * Medgrupo: the postmortem lives in the incident (feed, Postmortem
+         * page, status page once published) and is not mirrored into the
+         * Slack/Teams incident channel - like private notes since
+         * 11.0.3-medgrupo.3. Upstream posts the whole note on every change.
+         */
         workspaceNotification: {
-          sendWorkspaceNotification: true,
+          sendWorkspaceNotification: false,
         },
       });
     }
