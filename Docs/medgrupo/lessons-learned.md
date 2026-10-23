@@ -702,3 +702,45 @@ diretórios) e passar `--config` com o `jest.config.json` cujo
 Nunca junction/symlink pro `node_modules` (remover worktree com `--force` segue
 o link). Mutação em arquivo NÃO commitado: reverter com o inverso do `sed`,
 nunca `git checkout -- arquivo` (apaga o patch junto).
+
+## 2026-10-23 — tag `.5`: postmortem em pt-BR, com template, sem espelho no Slack
+
+**Pedido**: o INC-4 (MedSoft-Prod), resolvido às 13:41 BRT, postou no canal do Slack do
+incidente um postmortem inteiro em inglês ("📘 Postmortem Note updated for …"). Dono:
+postmortem fora do Slack, em português, com modelo nosso.
+
+**De onde veio**: `IncidentPostmortemRunner.draftPostmortemOnResolve` (switch de projeto
+`enableAutomaticPostmortemDraft` = "Draft a postmortem when an incident resolves", ligado
+por default em project novo) chama `generatePostmortemFromAI` SEM template → prompt
+upstream fixo em inglês (Executive Summary/Timeline/RCA/Impact/Action Items/Lessons). A
+`.4` só pôs `AI_RESPONSE_LANGUAGE` no chat/investigação/TL;DR. Ao gravar a nota,
+`IncidentService.applyPostmortemUpdate` cria o feed `PostmortemNote` com
+`sendWorkspaceNotification: true` e a nota INTEIRA no markdown → canal do incidente. Não
+há regra de notificação nem switch para esse sub-evento.
+
+**Patch (App apenas, probe segue na `.1`)**:
+- `IncidentAIContextBuilder.buildPostmortemLanguageRule` (exportada; o builder de
+  episódio importa): sem template, "write the entire postmortem, section headings
+  included, in <idioma>" fecha as grounding rules; com template, entra como último
+  bullet das CRITICAL INSTRUCTIONS pedindo só o conteúdo no idioma e os títulos do
+  template intactos. Nada parseia postmortem por título (diferente do
+  `InvestigationReport`), por isso aqui os títulos traduzem. Parâmetro
+  `responseLanguage` com default `AiResponseLanguage` (testes passam explícito) em
+  `formatIncidentContextForPostmortem` e `formatEpisodeContextForPostmortem`.
+- `applyPostmortemUpdate`: `sendWorkspaceNotification: false` no feed `PostmortemNote`
+  (mesma decisão das private notes da 11.0.3-medgrupo.3). Feed, página Postmortem e
+  status page (quando publicado) seguem iguais. O aviso curto do runner ("🧠 AI — Draft
+  Postmortem", sem corpo) fica.
+- Testes: `Tests/Server/Utils/AI/PostmortemPromptLanguage.test.ts` (incident + episode,
+  com/sem template, sem idioma = upstream intacto, default = env);
+  `PostmortemNotifyOnPublish.test.ts` ajustado (flag `false`). Jest direto:
+  `node node_modules/jest/bin/jest.js --config jest.config.json --runInBand <arquivos>`
+  em `packages/Common` (o shim `node_modules/.bin/jest` é shell, `node` não executa).
+
+**Fora do código (UI, nos 2 projects)**: switch "Draft a postmortem when an incident
+resolves" desligado (o runner não usa template) e template "Postmortem Medgrupo"
+cadastrado em Incidents → Settings → Postmortem Templates (fonte canônica:
+gitops-platform `docs/postmortem-template.md`). Fluxo: página Postmortem do incidente →
+"Generate with AI" → escolher o template → revisar → publicar na status page se couber.
+Não feito (YAGNI): runner usar template default; nota pública/interna gerada por IA segue
+sem regra de idioma (`formatIncidentContextForNote`).

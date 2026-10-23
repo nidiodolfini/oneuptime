@@ -19,7 +19,11 @@ import { LLMMessage } from "../LLM/LLMService";
 import PromptText from "../../../Utils/AI/PromptText";
 import NotificationRuleWorkspaceChannel from "../../../Types/Workspace/NotificationRules/NotificationRuleWorkspaceChannel";
 import WorkspaceType from "../../../Types/Workspace/WorkspaceType";
-import { AIGenerationContext } from "./IncidentAIContextBuilder";
+import {
+  AIGenerationContext,
+  buildPostmortemLanguageRule,
+} from "./IncidentAIContextBuilder";
+import { AiResponseLanguage } from "../../EnvironmentConfig";
 import Incident from "../../../Models/DatabaseModels/Incident";
 import { AiContextActivity } from "../../../Types/AI/AiContext";
 import { withAiContext } from "./AiContext/AiContextPrompt";
@@ -301,6 +305,8 @@ export default class IncidentEpisodeAIContextBuilder {
     template?: string,
     // The project's AI context, first in the system prompt; none: as before.
     aiContext?: AiContextActivity | null | undefined,
+    // Medgrupo: defaults to AI_RESPONSE_LANGUAGE; tests pass it explicitly.
+    responseLanguage: string = AiResponseLanguage,
   ): AIGenerationContext {
     const {
       episode,
@@ -454,7 +460,7 @@ CRITICAL INSTRUCTIONS:
 - If a section in the template has no relevant data, write "No data available" or leave the placeholder text
 - Be blameless - focus on systemic improvements rather than individual blame
 - Write in a professional, clear, and concise manner
-- Consider all member incidents when analyzing root cause and impact
+- Consider all member incidents when analyzing root cause and impact${buildPostmortemLanguageRule({ language: responseLanguage, hasTemplate: true })}
 
 TEMPLATE TO FILL (use this exact structure):
 
@@ -481,7 +487,7 @@ Write in a professional, clear, and concise manner. Use markdown formatting for 
 Grounding rules (important):
 - Use ONLY facts that appear in the provided episode data. Do NOT invent root causes, timelines, metrics, impact, or actions the data does not support.
 - If a section needs information the data does not contain, write "Not available in the incident record" instead of guessing.
-- Never fabricate numbers or state confidence levels.`;
+- Never fabricate numbers or state confidence levels.${buildPostmortemLanguageRule({ language: responseLanguage, hasTemplate: false })}`;
     }
 
     // The project's AI context, first: the team's notes on its systems.
