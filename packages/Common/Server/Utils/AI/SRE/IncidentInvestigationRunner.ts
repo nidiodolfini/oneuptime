@@ -620,16 +620,13 @@ export default class AIIncidentInvestigationRunner {
             displayColor: Blue500,
             feedInfoInMarkdown: postData.analysisMarkdown,
             /*
-             * Quiet mode: an inconclusive investigation posts to the timeline
-             * but does NOT loudly ping the workspace / on-call. Fail
-             * direction (G6): when the confidence classification itself
-             * failed, the ping SENDS — quiet mode fails louder, not silent.
+             * Medgrupo: the RCA lives in the incident (feed, internal note, AI
+             * card) and is not mirrored into the Slack/Teams incident channel,
+             * confident or not - like postmortems since 14.0.46-medgrupo.5.
+             * Upstream pings the workspace whenever the confidence signal says so.
              */
             workspaceNotification: {
-              sendWorkspaceNotification:
-                AIConfidenceSignal.shouldSendWorkspaceNotification(
-                  postData.confidence,
-                ),
+              sendWorkspaceNotification: false,
             },
           });
 
