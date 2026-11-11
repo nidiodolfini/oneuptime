@@ -744,3 +744,80 @@ gitops-platform `docs/postmortem-template.md`). Fluxo: página Postmortem do inc
 "Generate with AI" → escolher o template → revisar → publicar na status page se couber.
 Não feito (YAGNI): runner usar template default; nota pública/interna gerada por IA segue
 sem regra de idioma (`formatIncidentContextForNote`).
+
+## 2026-11-11 — rebase 14.0.46-medgrupo.6 → 14.0.107 (branch `medgrupo/14.0.107-r1`, Community Edition)
+
+**Motivação**: SIEM. A 14.0.46 tem Security Events, regras Sigma e threat intel, mas só a
+partir das versões seguintes o log de host vira evento de segurança sozinho (Windows Event
+Log, SSH/sudo, CloudTrail), existem Cloud accounts e casos. Decisão no gitops-platform:
+ADR-106. Delta upstream: 12.385 commits, 61 releases em 30 dias (a 14.0.107 saiu no dia
+do build e traz "App compiles again": a 14.0.106 não compilava — o gate segue sendo o
+`npm run compile` DENTRO do nosso build, nunca a existência da tag).
+
+**Como**: clone parcial novo (`--filter=blob:none --no-checkout --single-branch`), tags
+`14.0.46`/`14.0.107` do upstream, `git checkout -b medgrupo/14.0.107-r1 14.0.107` e
+`git cherry-pick -x` dos 17 commits de `14.0.46..medgrupo/14.0.46-r1`, um a um (parar no
+conflito, decidir, `--continue`/`--skip`). Sem `--directory=packages/` desta vez: o layout
+não mudou. TODOS os arquivos de código que os patches tocam mudaram no upstream.
+
+**Triagem dos 15 patches de código** (13 REAPLICADOS, 2 DROP) + 2 de docs (limpos):
+
+| Patch | Decisão | O que mudou no upstream / prova |
+|---|---|---|
+| Slack: ações MANUAIS de incident não postam (`6e86794bb9`) | REAPLICA (conflito) | `notifyUserId` virou `leadWithAuthor`; feed usa `IncidentRoleFeedText` + `apiKeyActor`. Estado: `!isManualAction && WorkspaceStateChangePosting.postsToWorkspace(...)`. Papel: atribuição com `cause.kind === "stateChange"` (o OneUptime dá o papel porque uma PESSOA mudou o estado) conta como manual — sem isso todo ack postaria "virou Incident Commander". O hunk do `OwnerNotificationSent` já é upstream (`false`) |
+| ProcessTelemetry stalled-job guard (`3c0ab8a574`) | REAPLICA (limpo) | — |
+| BaseModelTable N+1 (`e02da650c0`) | REAPLICA (limpo) | — |
+| Login com Keycloak (`3fd83410c0`) | REAPLICA (conflito) | Login redesenhado: o rodapé virou o bloco `sign-in-options` (`SignInOptionLink`). O `<a href>` entra como 1º item da lista `space-y-3`; segue `<a>` puro porque `/identity/oidc/:p/:o` é rota GET de servidor (`OIDC.ts:180`) e `Link` navega pelo router |
+| SSO: só memberships aceitas + `SSO_DEFAULT_PROJECT_IDS` (`68398f9305`) | REAPLICA (conflito só de import no `SSO.ts`) — crítico | upstream extraiu `SsoTeamMembership.addToTeams` (limite de pessoas só com billing ligado; aqui `BILLING_ENABLED=false`). `SSO.ts` não importa mais `Host`/`HttpProtocol` |
+| Estado INICIAL de incident não posta (`95a8720933`) | **DROP** | nativo: `WorkspaceStateChangePosting.postsToWorkspace` (Incident, Alert, episódios, manutenção) |
+| Notas privadas não espelham — Incident (`5e3e267751`) | REAPLICA (conflito) | bloco ganhou `leadWithAuthor`/`exceptChannel` (nota salva de mensagem do Slack); só o booleano muda |
+| Família Alert (`9c47c7fd65`) | REAPLICA em parte | notas privadas: como acima. Estado inicial: **DROP** (nativo) — `AlertStateTimelineService.ts` volta ao upstream |
+| Bells de owners — Alert (`a4f7a7ae06`) | **DROP** | upstream já tem `sendWorkspaceNotification: false` nos `OwnerNotificationSent` de state-change e created |
+| Reminder de unresolved (`39a8ed7e24`) | REAPLICA (limpo) | upstream segue com `true` |
+| SSO: nome do IdP > 50 caracteres (`515ea128a2`) | REAPLICA (limpo) | — |
+| Databases: tiles CloudWatch (`6772e89da0`) | REAPLICA (conflito) | catálogo ganhou `translationKey()`, `enabledByDefault` e `source: "agent-query"` (4 checks SQL do agente no PostgreSQL). Entradas do fork seguem com texto puro (`title`/`description` são `string`; sem chave no locale o texto aparece como está). Teste: a conta 5–8 ignora `agent-query` E os tiles do fork |
+| `AI_RESPONSE_LANGUAGE` (`accd0ca544`) | REAPLICA (conflito) | "Answer style" virou a constante `ANSWER_STYLE_SECTION`; a regra entra logo depois dela. Os dois chamadores (`ChatAgentRunner`, `ObservabilityAssistant`) continuam passando por `buildObservabilityChatSystemPrompt` |
+| Postmortem em pt-BR, sem espelho (`06eb36a397`) | REAPLICA (conflito) | os builders ganharam `aiContext` como 3º parâmetro; `responseLanguage` passa a ser o 4º (o teste do fork passa `undefined` no meio) |
+| RCA sem espelho no Slack (`b1c73c9c88`) | REAPLICA (conflito) | incident ganhou `notificationText` do "2º relatório" (`reportLead`); fica no bloco, sem efeito com `false`, para não deixar símbolo órfão |
+
+**Caminho para largar 3 patches (não feito agora)**: o upstream ganhou "AI context" (notas
+do time no início do system prompt, `AiContextPrompt.ts`) e a nota pode pedir o idioma;
+`InvestigationReportLanguagePrompt` entrega os títulos traduzidos que o parser lê. Isso
+substitui `AI_RESPONSE_LANGUAGE` e a regra do postmortem, mas é estado de UI por project e
+não foi provado aqui — mantive a env para o comportamento não mudar no upgrade.
+
+**Banco**: Postgres = 277 migrações de schema + 31 de dados (rollback = `pg_dump -Fc`
+antes, como no 12→14). ClickHouse: nenhum modelo mudou `tableName`, engine, partição ou
+chave de ordenação (só codecs e skip indexes novos); as migrações de dados que tocam o
+ClickHouse acrescentam colunas e uma delas materializa um skip index
+(`MaterializeAttributeValuesIndex`). O corte que apagou histórico na 11.x (tabelas V2
+dropadas no boot) não se repete nesta faixa. Lido no código:
+- o boot só faz `CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS` e `ADD INDEX IF
+  NOT EXISTS` (`Workers/Utils/AnalyticsDatabase/TableManegement.ts`, igual nas duas tags);
+  diferença de tipo ou codec só vira log, então os codecs novos NÃO chegam às colunas que
+  já existem;
+- `MaterializeAttributeValuesIndex` enfileira `MATERIALIZE INDEX` em `LogItemV3Local` e
+  `SpanItemV3Local` com `mutations_sync=0`: não bloqueia o boot, mas relê a coluna
+  `attributes` de todas as partes (I/O alto por um tempo, ~+4% de disco). Acompanhar em
+  `system.mutations`; `KILL MUTATION` cancela (`Docs/Content/en/installation/upgrading.md`);
+- Span ganha `isEntrySpan` e ExceptionInstance ganha `userId`: o wrapper Distributed das
+  duas é recriado uma vez (`CREATE OR REPLACE`), o que pode derrubar alguns segundos de
+  insert em buffer no instante do upgrade. Histórico intacto;
+- nada regrava `retentionDate` nem muda o TTL de Log/Metric/Span/ExceptionInstance;
+- o executor de data migration para na primeira falha: conferir ANTES do upgrade que a
+  tabela `DataMigration` do Postgres não tem migração antiga pendente, senão ela roda
+  junto.
+Mudança de comportamento, sem perda: busca interativa passa a devolver erro em 45 s em
+vez de resultado parcial (`timeout_overflow_mode='throw'`), e o explorador de traces
+lista só entry spans por padrão. O upstream fixa ClickHouse 26.7 nas duas tags; aqui roda
+25.3 desde antes.
+
+**Chart (gitops)**: `DISABLE_INSTANCE_CHECK_IN=true` — a 14.0.107 faz um check-in diário
+com oneuptime.com levando a URL e a versão da instalação (separado de `DISABLE_TELEMETRY`
+e de `DISABLE_UPDATE_CHECK`). HSTS de 1 ano por padrão com `HTTP_PROTOCOL=https`
+(`HSTS_MAX_AGE_SECONDS`; `0` desfaz). `ONEUPTIME_RUNNER_*` saiu, entrou `GLOBAL_RUNNER_*`.
+`CLOUD_CONNECT_AWS_ACCESS_KEY_ID/SECRET` é o que liga Cloud accounts (só chave estática).
+
+**Build**: receita 14 acima, sem mudança de comando. O `Dockerfile.tpl` do App agora tem
+estágio `runtime` enxuto (`community-pruned` → `community`); o alvo continua
+`--target community` e os `--build-arg GIT_SHA/APP_VERSION` continuam obrigatórios.
