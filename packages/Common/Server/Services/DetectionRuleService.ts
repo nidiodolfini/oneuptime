@@ -602,17 +602,18 @@ export class Service extends ProjectReferencesService<Model> {
       (updateBy.data as unknown as { riskScore?: unknown }).riskScore,
     );
 
-    // Same trim as onBeforeCreate — see the rationale there.
-    if (updateBy.data.groupByField !== undefined) {
-      updateBy.data.groupByField = (
-        updateBy.data.groupByField as string
-      ).trim();
+    /*
+     * Same trim as onBeforeCreate — see the rationale there. The edit form
+     * sends an empty field as null (which clears the column), so only a
+     * string is trimmed: `!== undefined` let null through and threw.
+     */
+    if (typeof updateBy.data.groupByField === "string") {
+      updateBy.data.groupByField = updateBy.data.groupByField.trim();
     }
 
-    if (updateBy.data.distinctCountField !== undefined) {
-      updateBy.data.distinctCountField = (
-        updateBy.data.distinctCountField as string
-      ).trim();
+    if (typeof updateBy.data.distinctCountField === "string") {
+      updateBy.data.distinctCountField =
+        updateBy.data.distinctCountField.trim();
     }
 
     const changes: RealTimeChanges = await this.checkRealTimeUpdate(updateBy);

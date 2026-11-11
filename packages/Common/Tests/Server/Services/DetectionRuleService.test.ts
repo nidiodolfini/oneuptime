@@ -465,4 +465,18 @@ describe("DetectionRuleService field-name trimming", () => {
     expect("groupByField" in result.updateBy.data).toBe(false);
     expect("distinctCountField" in result.updateBy.data).toBe(false);
   });
+
+  test("an update that clears the field names with null, as the edit form sends an empty field, is not an error", async () => {
+    givenScheduledRows();
+
+    const result: OnUpdate<DetectionRule> = await service.onBeforeUpdate(
+      buildUpdateBy({
+        groupByField: null,
+        distinctCountField: null,
+      } as unknown as UpdateBy<DetectionRule>["data"]),
+    );
+
+    expect(result.updateBy.data.groupByField).toBeNull();
+    expect(result.updateBy.data.distinctCountField).toBeNull();
+  });
 });

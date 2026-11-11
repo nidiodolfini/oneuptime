@@ -840,3 +840,11 @@ pular o gate é buildar sem saber se os patches compilam.
   de novo.
 - Os workflows do upstream não disparam em push de `medgrupo/**` (só `pull_request` e
   `main`), então o push da branch sozinho não valida nada.
+
+## 2026-11-11 — tag `14.0.107-medgrupo.2`: salvar regra de detecção pelo painel dava 500
+
+- **Sintoma:** Security Events → Detections → editar qualquer regra sem `Distinct Count Field` e salvar → "Server Error". No log: `TypeError: Cannot read properties of null (reading trim)` em `DetectionRuleService.onBeforeUpdate`.
+- **Causa:** o formulário de edição manda campo vazio como `null`; o hook só conferia `!== undefined` antes do `.trim()` de `groupByField` e `distinctCountField`. Bug do upstream, ainda na `main` em 11/11/2026 (`cb3f2dada3`).
+- **Correção:** só faz trim quando o valor é string (`typeof === "string"`); `null` segue adiante e limpa a coluna. Teste de regressão em `Tests/Server/Services/DetectionRuleService.test.ts`.
+- **No próximo rebase:** conferir se o upstream corrigiu; se sim, descartar este patch. Candidato a PR upstream (não enviado).
+- **Contorno que não depende do patch:** exceção de regra (Security Events → Rule Exceptions, kind Value, campo com o nome do Sigma, `*` como curinga) em vez de editar o YAML.
