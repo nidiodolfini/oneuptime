@@ -38,6 +38,8 @@ import BadRequestException from "Common/Types/Exception/BadRequestException";
 import Exception from "Common/Types/Exception/Exception";
 import ExceptionMessages from "Common/Types/Exception/ExceptionMessages";
 import ServerException from "Common/Types/Exception/ServerException";
+// Medgrupo: o bloco do SSO_DEFAULT_PROJECT_IDS grava invitationAcceptedAt.
+import OneUptimeDate from "Common/Types/Date";
 import ObjectID from "Common/Types/ObjectID";
 import PositiveNumber from "Common/Types/PositiveNumber";
 import DatabaseConfig from "Common/Server/DatabaseConfig";
