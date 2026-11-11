@@ -1,0 +1,127 @@
+name: Medgrupo Build
+
+# Workflow do FORK Medgrupo (nao existe no upstream). Builda as duas imagens do fork
+# (app Community e probe) no runner do GitHub e as entrega como artefato.
+#
+# Por que aqui e nao na maquina de quem faz o rebase: desde a 14.0.107 o type-check do
+# App (`npm run compile`, o gate do build) nao cabe mais em 8 GB de RAM. Com o heap padrao
+# de 8 GB a VM do Docker so faz swap; com 5,6 GB o tsc morre em "JavaScript heap out of
+# memory". O Build do upstream faz o mesmo `docker build --target community` em
+# ubuntu-latest, entao o runner padrao comporta.
+#
+# Dispara no push de uma tag `<upstream>-medgrupo.<n>` e builda o commit da tag:
+# APP_VERSION = nome da tag, GIT_SHA = commit. Isso tambem garante a regra da linhagem
+# (Docs/medgrupo/lessons-learned.md): a imagem sai do commit taggeado, nunca de arvore
+# local. Se o build falhar nao existe imagem: apagar a tag, corrigir e taggear de novo.
+#
+# O push para o GHCR continua manual (docker load + docker push de quem tem
+# `write:packages`): os pacotes oneuptime-app/oneuptime-probe sao do usuario e o
+# GITHUB_TOKEN deste repo nao escreve neles.
+# ponytail: artefato + push manual; push direto do workflow quando os pacotes forem
+# ligados ao repo (Package settings -> Manage Actions access).
+
+on:
+  push:
+    tags:
+      - "*-medgrupo.*"
+
+permissions:
+  contents: read
+
+jobs:
+  app:
+    name: App (Community)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      IMAGE: ghcr.io/nidiodolfini/oneuptime-app:${{ github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up gomplate
+        uses: ./.github/actions/setup-gomplate
+
+      - name: Render dos Dockerfiles (prerun)
+        run: npm run prerun
+
+      - name: Warm base images
+        run: bash ./Scripts/GHA/warm_base_images.sh ./packages/App/Dockerfile
+
+      - name: Build (o type-check roda aqui dentro)
+        run: |
+          docker build --target community \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            --build-arg APP_VERSION="${GITHUB_REF_NAME}" \
+            -t "${IMAGE}" -f ./packages/App/Dockerfile .
+
+      - name: Conferir versao e edicao gravadas na imagem
+        run: |
+          docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE}" \
+            | grep -E '^(APP_VERSION|GIT_SHA|IS_ENTERPRISE_EDITION)=' | tee /tmp/env.txt
+          grep -qx "APP_VERSION=${GITHUB_REF_NAME}" /tmp/env.txt
+          grep -qx "GIT_SHA=${GITHUB_SHA}" /tmp/env.txt
+          grep -qx "IS_ENTERPRISE_EDITION=false" /tmp/env.txt
+
+      - name: Salvar a imagem
+        run: |
+          docker save "${IMAGE}" | gzip -1 > oneuptime-app.tar.gz
+          ls -la oneuptime-app.tar.gz
+          df -h / | tail -1
+
+      - name: Publicar o artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneuptime-app-${{ github.ref_name }}
+          path: oneuptime-app.tar.gz
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error
+
+  probe:
+    name: Probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      IMAGE: ghcr.io/nidiodolfini/oneuptime-probe:${{ github.ref_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up gomplate
+        uses: ./.github/actions/setup-gomplate
+
+      - name: Render dos Dockerfiles (prerun)
+        run: npm run prerun
+
+      - name: Warm base images
+        run: bash ./Scripts/GHA/warm_base_images.sh ./packages/Probe/Dockerfile
+
+      - name: Build
+        run: |
+          docker build \
+            --build-arg GIT_SHA="${GITHUB_SHA}" \
+            --build-arg APP_VERSION="${GITHUB_REF_NAME}" \
+            -t "${IMAGE}" -f ./packages/Probe/Dockerfile .
+
+      - name: Conferir versao gravada na imagem
+        run: |
+          docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "${IMAGE}" \
+            | grep -E '^(APP_VERSION|GIT_SHA)=' | tee /tmp/env.txt
+          grep -qx "APP_VERSION=${GITHUB_REF_NAME}" /tmp/env.txt
+          grep -qx "GIT_SHA=${GITHUB_SHA}" /tmp/env.txt
+
+      - name: Salvar a imagem
+        run: |
+          docker save "${IMAGE}" | gzip -1 > oneuptime-probe.tar.gz
+          ls -la oneuptime-probe.tar.gz
+          df -h / | tail -1
+
+      - name: Publicar o artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: oneuptime-probe-${{ github.ref_name }}
+          path: oneuptime-probe.tar.gz
+          compression-level: 0
+          retention-days: 3
+          if-no-files-found: error

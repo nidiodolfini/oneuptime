@@ -818,6 +818,25 @@ e de `DISABLE_UPDATE_CHECK`). HSTS de 1 ano por padrão com `HTTP_PROTOCOL=https
 (`HSTS_MAX_AGE_SECONDS`; `0` desfaz). `ONEUPTIME_RUNNER_*` saiu, entrou `GLOBAL_RUNNER_*`.
 `CLOUD_CONNECT_AWS_ACCESS_KEY_ID/SECRET` é o que liga Cloud accounts (só chave estática).
 
-**Build**: receita 14 acima, sem mudança de comando. O `Dockerfile.tpl` do App agora tem
-estágio `runtime` enxuto (`community-pruned` → `community`); o alvo continua
-`--target community` e os `--build-arg GIT_SHA/APP_VERSION` continuam obrigatórios.
+**Build — saiu da máquina local**: o `Dockerfile.tpl` do App agora tem estágio `runtime`
+enxuto (`community-pruned` → `community`); o alvo continua `--target community` e os
+`--build-arg GIT_SHA/APP_VERSION` continuam obrigatórios. O que mudou é onde roda: o
+type-check do App (`RUN npm run compile`, o gate) não cabe mais nos 8 GB do WSL
+(`~/.wslconfig`, teto posto de propósito). Medido: com o heap padrão de 8 GB a VM do
+Docker encheu RAM e swap e ficou 9 min parada no passo; com
+`NODE_OPTIONS=--max-old-space-size=5632` o tsc morreu em 280 s com "JavaScript heap out
+of memory". O resto do build local passa. O app roda transpile-only
+(`TS_NODE_TRANSPILE_ONLY=1`) e o resultado do tsc é apagado nos estágios `*-pruned`, mas
+pular o gate é buildar sem saber se os patches compilam.
+- Agora: `.github/workflows/medgrupo-build.yml` (só do fork) builda app e probe em
+  `ubuntu-latest` no push de uma tag `<upstream>-medgrupo.<n>`, com `APP_VERSION` = tag e
+  `GIT_SHA` = commit da tag, confere as envs dentro da imagem e publica cada uma como
+  artefato (`docker save | gzip`, 3 dias). É o mesmo `docker build --target community` do
+  `build.yml` do upstream, que só dispara em `pull_request`.
+- Depois: `gh run download <run> -R nidiodolfini/oneuptime`, `gunzip -c ... | docker load`,
+  conferir o patch DENTRO da imagem e `docker push` das duas (precisa de `write:packages`).
+- A regra "tag só depois do build passar" inverte: a tag dispara o build. Build vermelho =
+  não existe imagem; apagar a tag (`git push origin :refs/tags/<tag>`), corrigir, taggear
+  de novo.
+- Os workflows do upstream não disparam em push de `medgrupo/**` (só `pull_request` e
+  `main`), então o push da branch sozinho não valida nada.
