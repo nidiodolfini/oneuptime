@@ -530,11 +530,12 @@ export class Service extends ProjectReferencesService<Model> {
      * the documented "feature off" value so clearing the field still
      * works.
      */
-    if (createBy.data.groupByField !== undefined) {
+    // Only a string is trimmed: an API client may send null, as the edit form does.
+    if (typeof createBy.data.groupByField === "string") {
       createBy.data.groupByField = createBy.data.groupByField.trim();
     }
 
-    if (createBy.data.distinctCountField !== undefined) {
+    if (typeof createBy.data.distinctCountField === "string") {
       createBy.data.distinctCountField =
         createBy.data.distinctCountField.trim();
     }
