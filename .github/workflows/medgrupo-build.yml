@@ -14,11 +14,13 @@ name: Medgrupo Build
 # (Docs/medgrupo/lessons-learned.md): a imagem sai do commit taggeado, nunca de arvore
 # local. Se o build falhar nao existe imagem: apagar a tag, corrigir e taggear de novo.
 #
-# O push para o GHCR continua manual (docker load + docker push de quem tem
-# `write:packages`): os pacotes oneuptime-app/oneuptime-probe sao do usuario e o
-# GITHUB_TOKEN deste repo nao escreve neles.
-# ponytail: artefato + push manual; push direto do workflow quando os pacotes forem
-# ligados ao repo (Package settings -> Manage Actions access).
+# O job `publish` carrega os dois artefatos e faz o push no GHCR com o GITHUB_TOKEN.
+# Os pacotes oneuptime-app/oneuptime-probe sao do usuario: o repo precisa de Write em
+# cada um (Package settings -> Manage Actions access). Sem isso o push da
+# "permission_denied: write_package": conceder o acesso e usar "Re-run failed jobs",
+# que refaz so o `publish` (os artefatos ficam 3 dias), sem buildar de novo.
+# Antes do artefato, o job `app` confere os patches do fork DENTRO da imagem (o app roda
+# dos fontes em /usr/src): patch novo = uma linha a mais naquele passo.
 
 on:
   push:
@@ -65,6 +67,26 @@ jobs:
           grep -qx "APP_VERSION=${GITHUB_REF_NAME}" /tmp/env.txt
           grep -qx "GIT_SHA=${GITHUB_SHA}" /tmp/env.txt
           grep -qx "IS_ENTERPRISE_EDITION=false" /tmp/env.txt
+
+      - name: Conferir os patches do fork dentro da imagem
+        run: |
+          docker run --rm --entrypoint sh "${IMAGE}" -ec '
+            c() { grep -qF "$1" "$2" || { echo "FALTA o patch: $1 em $2" >&2; exit 1; }; echo "ok $2"; }
+            c "isManualAction" /usr/src/Common/Server/Services/IncidentStateTimelineService.ts
+            c "isManualAction" /usr/src/Common/Server/Services/IncidentMemberService.ts
+            c "stalled-job orphan" /usr/src/app/FeatureSet/Telemetry/Jobs/TelemetryIngest/ProcessTelemetry.ts
+            c "limit: 100," /usr/src/Common/UI/Components/ModelTable/BaseModelTable.tsx
+            c "login-with-keycloak" /usr/src/app/FeatureSet/Accounts/src/Pages/Login.tsx
+            c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/OIDC.ts
+            c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/SSO.ts
+            c "ColumnLength.Name" /usr/src/Common/Server/Services/UserService.ts
+            c "postgresql.cpu.utilization" /usr/src/Common/Types/DatabaseServer/DatabaseServerMetricCatalog.ts
+            c "AiResponseLanguage" /usr/src/Common/Server/Utils/AI/Chat/ObservabilityChatPrompt.ts
+            c "sendWorkspaceNotification: false" /usr/src/Common/Server/Utils/AI/SRE/IncidentInvestigationRunner.ts
+            c "sendWorkspaceNotification: false" /usr/src/app/FeatureSet/Workers/Jobs/IncidentOwners/SendUnresolvedReminderNotification.ts
+            c "typeof createBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.ts
+            c "typeof updateBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.ts
+          '
 
       - name: Salvar a imagem
         run: |
@@ -131,3 +153,27 @@ jobs:
           compression-level: 0
           retention-days: 3
           if-no-files-found: error
+
+  publish:
+    name: Publicar no GHCR
+    needs: [app, probe]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Baixar os artefatos
+        uses: actions/download-artifact@v4
+        with:
+          path: imgs
+
+      - name: Login no GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Carregar e publicar
+        run: |
+          for n in app probe; do
+            gunzip -c "imgs/oneuptime-${n}-${GITHUB_REF_NAME}/oneuptime-${n}.tar.gz" | docker load
+            docker push "ghcr.io/nidiodolfini/oneuptime-${n}:${GITHUB_REF_NAME}"
+          done
