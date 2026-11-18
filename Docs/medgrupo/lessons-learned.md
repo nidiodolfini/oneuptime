@@ -848,3 +848,15 @@ pular o gate é buildar sem saber se os patches compilam.
 - **Correção:** só faz trim quando o valor é string (`typeof === "string"`); `null` segue adiante e limpa a coluna. Teste de regressão em `Tests/Server/Services/DetectionRuleService.test.ts`.
 - **No próximo rebase:** conferir se o upstream corrigiu; se sim, descartar este patch. Candidato a PR upstream (não enviado).
 - **Contorno que não depende do patch:** exceção de regra (Security Events → Rule Exceptions, kind Value, campo com o nome do Sigma, `*` como curinga) em vez de editar o YAML.
+
+## 2026-11-18 — rebase 14.0.107-medgrupo.2 → 14.3.0 (branch `medgrupo/14.3.0-r1`, Community Edition)
+
+- **Por que 14.3.0 e não 15.0.0:** a 14.3.0 já traz o scan de SQL Server do Data Security e o mesmo código de Security Events, Hosts e Cloud da 15. A 15.0.0 (17/11) guarda as API keys como hash (voltar de versão troca todas), redesenha `Login.tsx` em cima do botão do Keycloak e tinha 1 dia.
+- **Triagem:** os 20 commits de `14.0.107..medgrupo/14.0.107-r1` entraram por `cherry-pick -x` sem conflito. Nenhum descartado: o `.trim()` em `null` de `DetectionRuleService` continua no upstream (14.3.0 e 15.0.0).
+- **Patch novo no mesmo assunto:** o `onBeforeCreate` tinha o mesmo `!== undefined` antes do `.trim()`; agora só faz trim de string, como o update. Teste de regressão junto.
+- **Build sem Docker local:** o workflow `Medgrupo Build` ganhou o passo que confere os patches dentro da imagem e o job `publish`, que faz o push no GHCR com o `GITHUB_TOKEN`. Os pacotes `oneuptime-app` e `oneuptime-probe` precisam dar Write ao repo (Package settings → Manage Actions access). Patch novo = uma linha a mais no passo de conferência.
+- **Clone raso para o rebase** (o repo inteiro não é necessário):
+  1. `gh api -X POST repos/nidiodolfini/oneuptime/git/refs -f ref=refs/heads/medgrupo/<v>-r1 -f sha=<commit da tag do upstream>`: o fork divide os objetos com o upstream, então a branch nasce na base sem ninguém subir o histórico.
+  2. `git init`, `git fetch --filter=blob:none --depth 1 origin medgrupo/<v>-r1` e `git fetch --filter=blob:none --depth 22 origin medgrupo/<anterior>-r1` (os commits do fork mais a base).
+  3. `cherry-pick -x` um a um; o push só leva os commits novos.
+- **No próximo rebase (15.x):** copiar a master API key antes (vira hash), conferir `Login.tsx` à mão, e testar se as regras de notificação por tipo de atualização (#9077) substituem os patches de Slack.
