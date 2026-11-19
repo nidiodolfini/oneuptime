@@ -80,6 +80,8 @@ jobs:
             c "isManualAction" /usr/src/Common/Server/Services/IncidentMemberService.js
             c "limit: 100," /usr/src/Common/UI/Components/ModelTable/BaseModelTable.tsx
             c "login-with-keycloak" /usr/src/app/FeatureSet/Accounts/src/Pages/Login.tsx
+            c "SSO_LOGIN_BUTTON_URL" /usr/src/app/FeatureSet/Accounts/src/Pages/Login.tsx
+            c "SSO_LOGIN_BUTTON_URL" /usr/src/Common/Server/EnvironmentConfig.js
             c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/OIDC.js
             c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/SSO.js
             c "substring(0, ColumnLength" /usr/src/Common/Server/Services/UserService.js

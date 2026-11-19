@@ -30,6 +30,7 @@ import {
   CAPTCHA_SITE_KEY,
   GoogleSignInClientId,
   MicrosoftSignInClientId,
+  env,
 } from "Common/UI/Config";
 import GoogleSignInButton from "../Components/GoogleSignInButton/GoogleSignInButton";
 import MicrosoftSignInButton from "../Components/MicrosoftSignInButton/MicrosoftSignInButton";
@@ -80,6 +81,20 @@ import SensitiveUrlToken from "Common/UI/Utils/SensitiveUrlToken";
 import LoginWithSsoPage from "./LoginWithSSO";
 import SessionEndedNotice from "../Components/SessionEndedNotice/SessionEndedNotice";
 import { SignInMethodsRead, useSignInMethods } from "../Utils/SignInMethods";
+
+/*
+ * Medgrupo fork: destino e texto do botao de SSO, lidos do env.js em runtime
+ * (cada instancia tem o seu projeto e OIDC). So caminho /identity/ ou URL
+ * https://; vazio ou qualquer outra coisa = sem botao (tela do upstream).
+ */
+const ssoLoginButtonEnv: string = env("SSO_LOGIN_BUTTON_URL").trim();
+const ssoLoginButtonUrl: string | null = /^(\/identity\/|https:\/\/)/.test(
+  ssoLoginButtonEnv,
+)
+  ? ssoLoginButtonEnv
+  : null;
+const ssoLoginButtonLabel: string =
+  env("SSO_LOGIN_BUTTON_LABEL").trim() || "Login com Keycloak";
 
 /*
  * The misc bag travels on the wire under `_miscData` — the key
@@ -234,6 +249,10 @@ const LoginPage: (props: ComponentProps) => JSX.Element = (
     Boolean(GoogleSignInClientId) && !isMasterAdminPasswordPage;
   const isMicrosoftSignInOffered: boolean =
     Boolean(MicrosoftSignInClientId) && !isMasterAdminPasswordPage;
+  const hasProviderSignIn: boolean =
+    isGoogleSignInOffered ||
+    isMicrosoftSignInOffered ||
+    Boolean(ssoLoginButtonUrl);
 
   /*
    * Whether "More ways to sign in" is open: single sign-on, a sign-in link
@@ -1607,53 +1626,60 @@ const LoginPage: (props: ComponentProps) => JSX.Element = (
                        * follows the fieldset.
                        */
                       <div data-testid="sign-in-options">
-                        {/*
-                         * Medgrupo fork: botao de login DIRETO via Keycloak (projeto
-                         * Medgrupo), sempre visivel como caminho principal, fora do
-                         * "More ways to sign in". <a href> (nao <Link>):
-                         * /identity/oidc/:p/:o e rota GET de servidor (Identity/API/
-                         * OIDC.ts) que redireciona ao Keycloak, sem a tela de e-mail.
-                         * IDs = config OIDC do projeto Medgrupo; se recriar a config,
-                         * atualizar. Ver docs/oneuptime-sso-keycloak.md (gitops-platform).
-                         * O divisor e a lista deixam de depender de Google/Microsoft.
-                         */}
-                        <LabelledDivider
-                          label={t("common.or")}
-                          className="my-5"
-                          dataTestId="sign-in-options-divider"
-                        />
-                        <div className="space-y-3">
-                          <a
-                            href="/identity/oidc/933778d7-66a2-4e4b-bdfc-35220c4ce4d6/16f70277-9d28-47be-8871-e70ac10058d3"
-                            data-testid="login-with-keycloak"
-                            className="flex w-full justify-center items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                          >
-                            Login com Keycloak
-                          </a>
-                          {/*
-                           * Not on the master admins' page: while the
-                           * server requires SSO, Google and Microsoft sign
-                           * nobody in.
-                           */}
-                          {isGoogleSignInOffered ? (
-                            <GoogleSignInButton
-                              title={t("common.continueWithGoogle")}
+                        {hasProviderSignIn && (
+                          <>
+                            <LabelledDivider
+                              label={t("common.or")}
+                              className="my-5"
+                              dataTestId="sign-in-options-divider"
                             />
-                          ) : (
-                            <></>
-                          )}
-                          {isMicrosoftSignInOffered ? (
-                            <MicrosoftSignInButton
-                              title={t("login.signInWithMicrosoft")}
-                            />
-                          ) : (
-                            <></>
-                          )}
-                        </div>
+                            <div className="space-y-3">
+                              {/*
+                               * Medgrupo fork: botao de login DIRETO no SSO
+                               * (Keycloak), primeiro item, fora do "More ways
+                               * to sign in". <a href> (nao <Link>):
+                               * /identity/oidc/:p/:o e rota GET de servidor
+                               * (Identity/API/OIDC.ts) que redireciona ao
+                               * IdP, sem a tela de e-mail. Destino e texto
+                               * vem do env.js (SSO_LOGIN_BUTTON_URL/_LABEL).
+                               */}
+                              {ssoLoginButtonUrl ? (
+                                <a
+                                  href={ssoLoginButtonUrl}
+                                  data-testid="login-with-keycloak"
+                                  className="flex w-full justify-center items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                                >
+                                  {ssoLoginButtonLabel}
+                                </a>
+                              ) : (
+                                <></>
+                              )}
+                              {/*
+                               * Not on the master admins' page: while the
+                               * server requires SSO, Google and Microsoft sign
+                               * nobody in.
+                               */}
+                              {isGoogleSignInOffered ? (
+                                <GoogleSignInButton
+                                  title={t("common.continueWithGoogle")}
+                                />
+                              ) : (
+                                <></>
+                              )}
+                              {isMicrosoftSignInOffered ? (
+                                <MicrosoftSignInButton
+                                  title={t("login.signInWithMicrosoft")}
+                                />
+                              ) : (
+                                <></>
+                              )}
+                            </div>
+                          </>
+                        )}
                         <MoreWaysToSignIn
                           isOpen={isMoreWaysOpen}
                           onToggle={toggleMoreWays}
-                          className="mt-4"
+                          className={hasProviderSignIn ? "mt-4" : "mt-5"}
                         />
                         {isMoreWaysOpen && (
                           <div

@@ -89,6 +89,9 @@ const FRONTEND_ENV_ALLOW_LIST: Array<string> = [
    * GlobalRunnerRepositoryTokens).
    */
   "GLOBAL_RUNNERS_CODE_FIX_GITHUB_ONLY",
+  // Medgrupo: destino e texto do botao de SSO da tela de login (Accounts Login.tsx).
+  "SSO_LOGIN_BUTTON_URL",
+  "SSO_LOGIN_BUTTON_LABEL",
 ];
 
 /*
