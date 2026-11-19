@@ -151,7 +151,16 @@ export const AWS_DATA_SECURITY_MAX_SNAPSHOTS_PER_REGION: number = 200;
 const MAX_KMS_PAGES: number = 10;
 const OPENSEARCH_DESCRIBE_BATCH: number = 5;
 // A read's bounds when the caller gives none.
-const DEFAULT_MAX_REQUESTS: number = 5000;
+/*
+ * Medgrupo: 15000, not upstream's 5000. An account's S3 read takes about
+ * nine requests a bucket and runs before any Region is read: our 541
+ * buckets spent the whole 5000, so the databases (RDS, DynamoDB,
+ * DocumentDB) and the IAM access were never read - "The read reached its
+ * limit for this run", on every run (measured on 18/11/2026). 15000 covers
+ * the 1000 buckets this reader allows itself and, at the ~20 requests a
+ * second it makes, still ends inside the 15 minutes below.
+ */
+const DEFAULT_MAX_REQUESTS: number = 15000;
 const DEFAULT_MAX_DURATION_MS: number = 15 * 60 * 1000;
 const MAX_WARNINGS: number = 50;
 const MAX_STORE_WARNINGS: number = 20;

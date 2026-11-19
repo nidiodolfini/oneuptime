@@ -860,3 +860,10 @@ pular o gate é buildar sem saber se os patches compilam.
   2. `git init`, `git fetch --filter=blob:none --depth 1 origin medgrupo/<v>-r1` e `git fetch --filter=blob:none --depth 22 origin medgrupo/<anterior>-r1` (os commits do fork mais a base).
   3. `cherry-pick -x` um a um; o push só leva os commits novos.
 - **No próximo rebase (15.x):** copiar a master API key antes (vira hash), conferir `Login.tsx` à mão, e testar se as regras de notificação por tipo de atualização (#9077) substituem os patches de Slack.
+
+## 2026-11-18 — tag `14.3.0-medgrupo.2`: a leitura de postura do Data Security nunca chegava aos bancos
+
+- **Sintoma:** com a conexão da conta 733 no nível "Configuration only", a primeira leitura (18/11 21:01) leu os 541 buckets em 247 s e terminou "Partly succeeded" com "The read reached its limit for this run before every data store was read". Os 23 RDS, as 3 tabelas do DynamoDB e o DocumentDB ficaram com exposição "Unknown", e a análise de acesso do IAM não rodou.
+- **Causa:** `AwsDataSecurityReader.readAccount` lê o S3 inteiro antes de qualquer Region, cada bucket custa cerca de nove requisições e o teto do leitor é `DEFAULT_MAX_REQUESTS = 5000`. Com mais de ~550 buckets o orçamento acaba no S3 em toda rodada; não há continuação entre rodadas (a seguinte, 24 h depois, começa do S3 de novo). O upstream 15.0.0 tem o mesmo valor.
+- **Correção:** teto em 15000, que cobre os 1000 buckets que o próprio leitor se permite (`AWS_DATA_SECURITY_MAX_BUCKETS`) e, a ~20 requisições por segundo, cabe nos 15 minutos de `DEFAULT_MAX_DURATION_MS`.
+- **No próximo rebase:** conferir se o upstream subiu o teto ou passou a ler as Regions antes do S3; se sim, descartar. Candidato a issue no upstream (não aberta).
