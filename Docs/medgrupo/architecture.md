@@ -4,6 +4,8 @@ Data: 2026-04-11
 
 Status: documento de referência escrito imediatamente antes do rebuild completo da stack (ver `docs/med-uptime-runbook-bootstrap.md`). Descreve a intenção do desenho, não necessariamente o estado exato do cluster num momento qualquer.
 
+Revisão de 2026-11-19: as versões citadas abaixo (OneUptime 10.0.45/10.0.55) são as da época; a linha em uso está no `README.md` desta pasta e o que mudou desde então, tag a tag, no `lessons-learned.md`. Só a nota de autenticação (fluxo 4) foi corrigida nesta revisão; topologia, secrets e hostnames não foram reconferidos contra o cluster.
+
 ## Objetivo
 
 A stack `med-uptime` é a plataforma central de **incident management e AIOps** do Medgrupo. Ela roda no cluster hub `Management-0226` (EKS) e combina quatro funções:
@@ -133,7 +135,7 @@ oneuptime.mgmt.medgrupo.com.br
 Service oneuptime:80 → Pods :3002
 ```
 
-Autenticação via email + senha armazenada em `oneuptime-admin-password`. Integração SAML/SSO não está habilitada nesta instância.
+Autenticação: desde 07/2026 os usuários entram por SSO via Keycloak (OIDC configurado por projeto). O fork soma o botão "Login com Keycloak" na tela de login e o provisionamento nos projetos default (`SSO_DEFAULT_PROJECT_IDS`); ver `lessons-learned.md` e `docs/oneuptime-sso-keycloak.md` no gitops-platform. A senha em `oneuptime-admin-password` é a do login admin (tabela de secrets abaixo).
 
 ## Topologia de cluster
 

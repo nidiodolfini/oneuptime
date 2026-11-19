@@ -867,3 +867,24 @@ pular o gate é buildar sem saber se os patches compilam.
 - **Causa:** `AwsDataSecurityReader.readAccount` lê o S3 inteiro antes de qualquer Region, cada bucket custa cerca de nove requisições e o teto do leitor é `DEFAULT_MAX_REQUESTS = 5000`. Com mais de ~550 buckets o orçamento acaba no S3 em toda rodada; não há continuação entre rodadas (a seguinte, 24 h depois, começa do S3 de novo). O upstream 15.0.0 tem o mesmo valor.
 - **Correção:** teto em 15000, que cobre os 1000 buckets que o próprio leitor se permite (`AWS_DATA_SECURITY_MAX_BUCKETS`) e, a ~20 requisições por segundo, cabe nos 15 minutos de `DEFAULT_MAX_DURATION_MS`.
 - **No próximo rebase:** conferir se o upstream subiu o teto ou passou a ler as Regions antes do S3; se sim, descartar. Candidato a issue no upstream (não aberta).
+
+## 2026-11-19 — revisão do stack contra o upstream 14.3.0 e 16.0.0, higiene do fork
+
+Leitura de código, sem tag nem imagem nova. **Nada abaixo foi testado na instância:** cada item é o que conferir antes de descartar um patch.
+
+- **O guard de stalled-job é código morto.** Em `ProcessTelemetry.ts` o upstream chama `UnknownQueueJob.handBack` para todo job cujo `type` não é um `TelemetryType`, o que inclui `undefined`, e o `handBack` nunca retorna (lança `DelayedError` ou `UnrecoverableError`). O guard do fork (`!jobData?.type`) vem logo depois e não é alcançado. Vale desde, pelo menos, a 14.0.107. A conferência do workflow passava porque é um `grep` do texto. No próximo rebase: descartar o patch e a linha dele no passo de conferência, ou mover o guard para antes do `handBack` se os logs mostrarem `telemetry of type "undefined"`.
+- **Patches de Slack têm equivalente nativo já na 14.3.0** (não é preciso esperar a 15.x). Cada regra de notificação do workspace tem o passo "Which updates to post" (`NotificationRuleUpdates.ts`, `NotificationRuleUpdatesForm.tsx`, aplicado em `WorkspaceNotificationRuleService`), e cada entrada de feed tem um tipo (`Server/Utils/Feed/FeedUpdateKinds.ts`):
+
+  | Patch do fork | Tipo a desmarcar na regra |
+  |---|---|
+  | Notas privadas sem espelho (Incident e Alert) | `PrivateNotes` |
+  | Postmortem sem espelho | `Postmortem` |
+  | RCA da IA sem espelho (Incident e Alert) | `AI` |
+  | Reminder de unresolved (`OwnerNotificationSent`) | `Other`, que também leva vínculos, regras de label e erros de entrega |
+  | Papéis e owners | `Owners` (todos, não só os manuais) |
+
+  Sem equivalente: "ação MANUAL não posta" (`isManualAction`), que decide por autor e não por tipo. Testar num canal antes de largar qualquer patch: regra sem escolha feita posta tudo, como sempre.
+- **Botão do Keycloak e `SSO_DEFAULT_PROJECT_IDS` têm caminho nativo.** O Global OIDC (Admin Dashboard → Settings) é um provedor da instância com projetos anexados e times default por projeto (`GlobalOidcProject`); a cada login o usuário entra nos times dos projetos anexados em que ainda não está. Com o servidor exigindo SSO, `Login.tsx` devolve a `LoginWithSsoPage`, que lista os provedores da instância primeiro, um botão cada. Custos: redirect URI nova no Keycloak (`/identity/global-oidc-callback/:globalOidcId`), senha só para master admin, e o mesmo defeito de contar convite pendente como membership (`upstream-prs-draft.md`, candidato 3).
+- **`upstream-16.0.0`**: branch nova, a tag 16.0.0 do upstream (commit `dec5b8392b`, 2026-11-18) sem nada em cima. Base para o próximo rebase e para as branches de contribuição. Os candidatos 1 a 4 do `upstream-prs-draft.md` continuam presentes nela.
+- **Workflow:** o `Medgrupo Build` ganhou o job `tests`, que roda os seis arquivos de teste que os patches trazem ou alteram (525 testes, ~40 s, sem postgres nem valkey), e o `publish` passou a depender dele. Rodado fora do runner com Node 22, com e sem `ee/`; no runner roda com Node 26, como o Common Test do upstream. Não use `npm run test -- <arquivos>`: o script já passa `./Tests` e o jest soma os padrões.
+- **Clone raso, mais uma:** `git fetch --depth=N` de OUTRA branch move a fronteira rasa do histórico que as duas dividem. Depois de um `--depth=5` numa branch vizinha, o commit de merge a reverter virou fronteira (sem pais), e `git revert -m 1` nele tratou o commit como raiz: esvaziou a árvore inteira, sem erro. `git revert --abort` desfaz. Em clone raso, conferir `git rev-list --parents -n1 <commit>` antes de reverter, ou restaurar os arquivos da base com `git checkout <base> -- <arquivos>`.
