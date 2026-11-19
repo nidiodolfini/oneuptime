@@ -19,8 +19,12 @@ name: Medgrupo Build
 # cada um (Package settings -> Manage Actions access). Sem isso o push da
 # "permission_denied: write_package": conceder o acesso e usar "Re-run failed jobs",
 # que refaz so o `publish` (os artefatos ficam 3 dias), sem buildar de novo.
-# Antes do artefato, o job `app` confere os patches do fork DENTRO da imagem (o app roda
-# dos fontes em /usr/src): patch novo = uma linha a mais naquele passo.
+# Antes do artefato, o job `app` confere os patches do fork DENTRO da imagem: patch novo =
+# uma linha a mais naquele passo. Desde a 16 (upstream #9226) o servidor roda o .js que o
+# build compila ao lado de cada .ts (Common/Server/Utils/TsNode/Precompile.js), entao o
+# patch de servidor e conferido no .js (o texto do marcador e o do JS emitido: sem tipo,
+# import vira `Modulo_1.default.X`). Os do frontend seguem no .tsx: o bundle minificado
+# sai dele no mesmo build.
 
 on:
   push:
@@ -72,21 +76,20 @@ jobs:
         run: |
           docker run --rm --entrypoint sh "${IMAGE}" -ec '
             c() { grep -qF "$1" "$2" || { echo "FALTA o patch: $1 em $2" >&2; exit 1; }; echo "ok $2"; }
-            c "isManualAction" /usr/src/Common/Server/Services/IncidentStateTimelineService.ts
-            c "isManualAction" /usr/src/Common/Server/Services/IncidentMemberService.ts
-            c "stalled-job orphan" /usr/src/app/FeatureSet/Telemetry/Jobs/TelemetryIngest/ProcessTelemetry.ts
+            c "isManualAction" /usr/src/Common/Server/Services/IncidentStateTimelineService.js
+            c "isManualAction" /usr/src/Common/Server/Services/IncidentMemberService.js
             c "limit: 100," /usr/src/Common/UI/Components/ModelTable/BaseModelTable.tsx
             c "login-with-keycloak" /usr/src/app/FeatureSet/Accounts/src/Pages/Login.tsx
-            c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/OIDC.ts
-            c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/SSO.ts
-            c "ColumnLength.Name" /usr/src/Common/Server/Services/UserService.ts
-            c "postgresql.cpu.utilization" /usr/src/Common/Types/DatabaseServer/DatabaseServerMetricCatalog.ts
-            c "AiResponseLanguage" /usr/src/Common/Server/Utils/AI/Chat/ObservabilityChatPrompt.ts
-            c "sendWorkspaceNotification: false" /usr/src/Common/Server/Utils/AI/SRE/IncidentInvestigationRunner.ts
-            c "sendWorkspaceNotification: false" /usr/src/app/FeatureSet/Workers/Jobs/IncidentOwners/SendUnresolvedReminderNotification.ts
-            c "typeof createBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.ts
-            c "typeof updateBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.ts
-            c "DEFAULT_MAX_REQUESTS: number = 15000" /usr/src/Common/Server/Utils/DataSecurity/Cloud/Aws/AwsDataSecurityReader.ts
+            c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/OIDC.js
+            c "SSODefaultProjectIds" /usr/src/app/FeatureSet/Identity/API/SSO.js
+            c "substring(0, ColumnLength" /usr/src/Common/Server/Services/UserService.js
+            c "postgresql.cpu.utilization" /usr/src/Common/Types/DatabaseServer/DatabaseServerMetricCatalog.js
+            c "AiResponseLanguage" /usr/src/Common/Server/Utils/AI/Chat/ObservabilityChatPrompt.js
+            c "sendWorkspaceNotification: false" /usr/src/Common/Server/Utils/AI/SRE/IncidentInvestigationRunner.js
+            c "sendWorkspaceNotification: false" /usr/src/app/FeatureSet/Workers/Jobs/IncidentOwners/SendUnresolvedReminderNotification.js
+            c "typeof createBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.js
+            c "typeof updateBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.js
+            c "DEFAULT_MAX_REQUESTS = 15000" /usr/src/Common/Server/Utils/DataSecurity/Cloud/Aws/AwsDataSecurityReader.js
           '
 
       - name: Salvar a imagem
