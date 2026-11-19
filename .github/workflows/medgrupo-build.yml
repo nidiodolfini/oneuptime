@@ -25,6 +25,14 @@ name: Medgrupo Build
 # patch de servidor e conferido no .js (o texto do marcador e o do JS emitido: sem tipo,
 # import vira `Modulo_1.default.X`). Os do frontend seguem no .tsx: o bundle minificado
 # sai dele no mesmo build.
+#
+# O job `tests` roda os testes que os patches do fork trazem ou alteram. A conferencia
+# acima e um `grep`: prova que o texto do patch esta na imagem, nao que ele ainda faz o
+# que deve (a guarda de stalled-job do ProcessTelemetry passou nela na 14.3 ja sendo
+# codigo morto). Os workflows de teste do upstream so disparam em `pull_request` e em
+# `main`, entao sem este job nada roda os testes do fork. O `publish` depende dele: teste
+# vermelho = nao existe imagem. Patch novo com teste = uma linha a mais na lista daquele
+# passo.
 
 on:
   push:
@@ -160,9 +168,64 @@ jobs:
           retention-days: 3
           if-no-files-found: error
 
+  tests:
+    name: Testes dos patches do fork
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Como no Common Test do upstream: o core e a Community Edition e roda sem ee/.
+      - name: Remover a Enterprise Edition (o core roda sem ee/)
+        run: rm -rf ee
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: packages/Common/package-lock.json
+
+      # O config.env que o `npm test` do Common exporta, montado como o test-setup.sh do
+      # upstream monta, mas SEM subir postgres e valkey: nenhum destes testes abre conexao
+      # (os que passam por servicos usam mocks). Se um teste novo precisar de banco, trocar
+      # este passo por `bash test-setup.sh` em packages/Common, como o test.common.yaml.
+      - name: config.env dos testes
+        run: |
+          printf '%s\n' \
+            NODE_ENV=test \
+            BILLING_ENABLED=true \
+            DATABASE_HOST=localhost \
+            DATABASE_PORT=5400 \
+            VALKEY_HOST=localhost \
+            VALKEY_PORT=6310 \
+            VALKEY_DB=0 \
+            VALKEY_USERNAME=default > config.env
+          node ./Scripts/Install/MergeEnvTemplate.js
+
+      - name: Instalar as dependencias do Common
+        uses: ./.github/actions/npm-install
+        with:
+          working-directory: packages/Common
+
+      # jest chamado direto, e nao `npm run test -- <arquivos>`: o script do Common ja
+      # passa `./Tests` como padrao, e o jest soma os padroes (rodaria a suite inteira).
+      - name: Rodar os testes dos patches
+        working-directory: packages/Common
+        run: |
+          export $(grep -v '^#' ../../config.env | xargs)
+          node --max-old-space-size=4096 node_modules/.bin/jest --forceExit --maxWorkers=2 \
+            Tests/Server/Services/DetectionRuleService.test.ts \
+            Tests/Server/Services/PostmortemNotifyOnPublish.test.ts \
+            Tests/Server/Services/UserServiceCreateByEmailNameLength.test.ts \
+            Tests/Server/Utils/AI/ObservabilityChatPrompt.test.ts \
+            Tests/Server/Utils/AI/PostmortemPromptLanguage.test.ts \
+            Tests/Types/DatabaseServer/DatabaseServerMetricCatalog.test.ts
+
   publish:
     name: Publicar no GHCR
-    needs: [app, probe]
+    needs: [app, probe, tests]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
