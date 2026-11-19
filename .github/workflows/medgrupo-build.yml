@@ -86,6 +86,7 @@ jobs:
             c "sendWorkspaceNotification: false" /usr/src/app/FeatureSet/Workers/Jobs/IncidentOwners/SendUnresolvedReminderNotification.ts
             c "typeof createBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.ts
             c "typeof updateBy.data.distinctCountField" /usr/src/Common/Server/Services/DetectionRuleService.ts
+            c "DEFAULT_MAX_REQUESTS: number = 15000" /usr/src/Common/Server/Utils/DataSecurity/Cloud/Aws/AwsDataSecurityReader.ts
           '
 
       - name: Salvar a imagem
