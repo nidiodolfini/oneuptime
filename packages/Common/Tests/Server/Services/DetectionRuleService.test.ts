@@ -442,6 +442,19 @@ describe("DetectionRuleService field-name trimming", () => {
     expect(result.createBy.data.distinctCountField).toBeUndefined();
   });
 
+  test("a create that sends the field names as null, as an API client may, is not an error", async () => {
+    const rule: DetectionRule = buildRule();
+    (rule as unknown as { groupByField: null }).groupByField = null;
+    (rule as unknown as { distinctCountField: null }).distinctCountField = null;
+
+    const result: OnCreate<DetectionRule> = await service.onBeforeCreate(
+      buildCreateBy(rule),
+    );
+
+    expect(result.createBy.data.groupByField).toBeNull();
+    expect(result.createBy.data.distinctCountField).toBeNull();
+  });
+
   test("update trims field names and collapses whitespace-only to the cleared value", async () => {
     givenScheduledRows();
 
@@ -464,6 +477,20 @@ describe("DetectionRuleService field-name trimming", () => {
 
     expect("groupByField" in result.updateBy.data).toBe(false);
     expect("distinctCountField" in result.updateBy.data).toBe(false);
+  });
+
+  test("an update that clears the field names with null, as the edit form sends an emptied field, is not an error", async () => {
+    givenScheduledRows();
+
+    const result: OnUpdate<DetectionRule> = await service.onBeforeUpdate(
+      buildUpdateBy({
+        groupByField: null,
+        distinctCountField: null,
+      } as unknown as UpdateBy<DetectionRule>["data"]),
+    );
+
+    expect(result.updateBy.data.groupByField).toBeNull();
+    expect(result.updateBy.data.distinctCountField).toBeNull();
   });
 });
 

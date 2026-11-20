@@ -557,13 +557,15 @@ export class Service extends ProjectReferencesService<Model> {
      * fires again with no error anywhere. Trimming here kills the whole
      * whitespace-from-a-paste class of that outage; '' is preserved as
      * the documented "feature off" value so clearing the field still
-     * works.
+     * works. Only a string is trimmed: a client that sends null for a
+     * field it leaves empty, as the edit form does, must not fail the
+     * save.
      */
-    if (createBy.data.groupByField !== undefined) {
+    if (typeof createBy.data.groupByField === "string") {
       createBy.data.groupByField = createBy.data.groupByField.trim();
     }
 
-    if (createBy.data.distinctCountField !== undefined) {
+    if (typeof createBy.data.distinctCountField === "string") {
       createBy.data.distinctCountField =
         createBy.data.distinctCountField.trim();
     }
@@ -633,17 +635,18 @@ export class Service extends ProjectReferencesService<Model> {
 
     this.normalizeResponseSteps(updateBy.data as unknown as JSONObject);
 
-    // Same trim as onBeforeCreate — see the rationale there.
-    if (updateBy.data.groupByField !== undefined) {
-      updateBy.data.groupByField = (
-        updateBy.data.groupByField as string
-      ).trim();
+    /*
+     * Same trim as onBeforeCreate — see the rationale there. The edit form
+     * sends an emptied field as null, which clears the column, so only a
+     * string is trimmed.
+     */
+    if (typeof updateBy.data.groupByField === "string") {
+      updateBy.data.groupByField = updateBy.data.groupByField.trim();
     }
 
-    if (updateBy.data.distinctCountField !== undefined) {
-      updateBy.data.distinctCountField = (
-        updateBy.data.distinctCountField as string
-      ).trim();
+    if (typeof updateBy.data.distinctCountField === "string") {
+      updateBy.data.distinctCountField =
+        updateBy.data.distinctCountField.trim();
     }
 
     const changes: RealTimeChanges = await this.checkRealTimeUpdate(updateBy);
