@@ -1,7 +1,7 @@
 # Plano: Fork do OneUptime + fixes upstream-compatible
 
 **Data**: 2026-04-11
-**Status**: Proposto, aguardando aprovação
+**Status**: Histórico. O plano foi executado em 2026-04-11 (resultado em `lessons-learned.md`, "Estado pós-deploy do fork"). A premissa de voltar à imagem oficial quando os PRs entrassem não se cumpriu: o fork virou linha permanente, com patches próprios da Medgrupo. O modelo em uso (branches `medgrupo/<upstream>-rN`, tags `<upstream>-medgrupo.<n>`, build pelo workflow) está no `README.md` desta pasta.
 **Duração estimada**: 4–6 horas de trabalho ativo + tempo assíncrono de build/deploy
 
 ## Contexto
