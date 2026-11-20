@@ -89,6 +89,7 @@ import TwoFactorAuthSetupUtil, {
 import SsoManagedSignIn from "../Utils/SsoManagedSignIn";
 import { SsoManagedBy } from "../../Types/SSO/SsoManagedSignIn";
 import Name from "../../Types/Name";
+import ColumnLength from "../../Types/Database/ColumnLength";
 import CaptureSpan from "../Utils/Telemetry/CaptureSpan";
 import { IsNull, MoreThan, UpdateResult } from "typeorm";
 import Timezone from "../../Types/Timezone";
@@ -1922,7 +1923,17 @@ export class Service extends DatabaseService<Model> {
     const user: Model = new Model();
     user.email = email;
     if (data.name) {
-      user.name = data.name;
+      /*
+       * The name an identity provider sends can be longer than an account's
+       * name holds (ColumnLength.Name). The create was refused for it, and
+       * with it the person's first sign-in. Cut to fit, as a SAML
+       * assertion's name already is (SSOUtil.getNameFromAssertion): every
+       * other way an account is made for somebody - OIDC, Global OIDC, Google,
+       * Microsoft, an invitation - comes through here.
+       */
+      user.name = new Name(
+        data.name.toString().substring(0, ColumnLength.Name).trim(),
+      );
     }
     user.isEmailVerified = data.isEmailVerified || false;
 
