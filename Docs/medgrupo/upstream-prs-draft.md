@@ -1,8 +1,41 @@
-# Drafts dos PRs upstream pro OneUptime/oneuptime
+# Contribuições para o upstream (OneUptime/oneuptime)
 
-Cada fix vira um PR standalone no `OneUptime/oneuptime` (já temos `OneUptime/oneuptime#2393` aberto pra o fix do `max_tokens`). Os outros 4 serão abertos na Fase 7 depois da validação end-to-end no Medgrupo.
+**Branch pattern no fork `nidiodolfini/oneuptime`**: `fix/<area>-<short-name>`, a partir de uma base limpa do upstream (`upstream-<versão>`, hoje `upstream-16.0.0`, ou o `master` do upstream), NUNCA de uma branch `medgrupo/*`. Um fix por branch, um PR por fix, sem referência cruzada.
 
-**Branch pattern no fork `nidiodolfini/oneuptime`**: `fix/<area>-<short-name>`, baseado em `master` (NÃO no nosso branch `medgrupo/10.0.55-fixes` que é baseado em tag). Cada PR cherry-picka um commit isolado.
+## Estado em 2026-11-20
+
+Conferido por leitura de código na tag 16.0.0 do upstream (2026-11-18), a base da linha `medgrupo/16.0.0-r1`. Nada aqui foi testado numa instância, e o estado dos PRs antigos no GitHub do upstream (abertos, fechados, mergeados) não foi consultado. Os commits citados são os da linha `medgrupo/16.0.0-r1`.
+
+### O que foi feito dos PRs de 2026-04
+
+| PR upstream | Assunto | Situação no código |
+|---|---|---|
+| #2393 | `max_tokens` do Anthropic | Absorvido: patch descartado no rebase 12.0.6 (`LLMService` reescrito) |
+| #2394 | Órfãos de stalled-job no worker de telemetria | Patch descartado no rebase 16.0.0: o upstream trata job de tipo desconhecido com `UnknownQueueJob.handBack` (#5546) antes de onde a guarda ficava. Ver o candidato 5 |
+| #2395 | Preâmbulo `getJob + remove` do `Queue.addJob` | Fora do stack desde a 11.0.3. Na 16.0.0 o `Queue.ts` ainda chama `getJob` antes do `add` em dois pontos e tem um caminho que pula essa ida e volta; não reavaliado |
+| #2396 | Race no find/create de Service | Absorvido: descartado no rebase 12.0.6 (`QueryHelper.findWithSameText`) |
+| #2397 | Valores não finitos em métricas OTLP | Absorvido: `OtelMetricsIngestService.toNumberOrNull` usa `Number.isFinite` no ramo de string |
+| (draft #6) | Seção do Slack acima de 3000 caracteres | Absorvido: descartado no rebase 14.0.46 (`SECTION_TEXT_MAX_LENGTH` e split nativo) |
+
+### Candidatos de hoje
+
+Todos presentes na 16.0.0. Os três primeiros são bug puro, pequenos e já têm teste no fork.
+
+1. **`DetectionRuleService`: `.trim()` em `null` derruba criar e salvar regra (500).** O `onBeforeCreate` e o `onBeforeUpdate` só conferem `!== undefined` antes do `.trim()` de `groupByField` e `distinctCountField`, e o formulário manda campo vazio como `null`. Fork: `5a59da5287` (update) e `63048299ae` (create), teste em `Tests/Server/Services/DetectionRuleService.test.ts`.
+2. **`UserService.createByEmail`: nome vindo do IdP acima de 50 caracteres derruba o primeiro login.** O claim `name` do OIDC/SAML vai direto para `User.name` (`ColumnLength.Name`). Fork: `1c4fc61340`, teste em `Tests/Server/Services/UserServiceCreateByEmailNameLength.test.ts`.
+3. **Login SSO/OIDC conta convite pendente como membership.** O `teamMemberCount` dos quatro callbacks (`OIDC.ts`, `SSO.ts`, `GlobalOIDC.ts`, `GlobalSSO.ts`) não filtra `hasAcceptedInvitation`: quem tem só um convite pendente ganha sessão, não entra em time nenhum e cai em "create your first project". Fork: primeira metade do `09273328be` (só `OIDC.ts` e `SSO.ts`). Para o upstream, vale propor que o login aceite o convite pendente, como o `ProjectSsoSignInConfirmation` já faz, em vez de criar uma segunda membership. A segunda metade daquele commit (`SSO_DEFAULT_PROJECT_IDS`) é da Medgrupo e não vai: o Global OIDC com projetos anexados cobre o caso.
+4. **`AwsDataSecurityReader`: o S3 gasta o orçamento inteiro da leitura.** `DEFAULT_MAX_REQUESTS = 5000`, cerca de nove requisições por bucket, S3 lido antes de qualquer Region e sem continuação entre rodadas: conta com mais de ~550 buckets nunca tem RDS, DynamoDB, DocumentDB nem IAM lidos. Fork: `0dc5236527` (teto em 15000). Para o upstream o número é paliativo; propor orçamento por fase, Regions antes do S3 ou continuação entre rodadas. Pode começar como issue.
+5. **Job órfão de telemetria é tratado como "outra release" (hipótese).** Um job cujo hash perdeu o `data` chega com `type` indefinido, entra em `describeUnknownTelemetryJob` e vai para o `handBack`. Pela leitura do `UnknownQueueJob.getDueAt`, sem `timestamp` no hash a conta de espera dá "30 minutos vencidos" e o job falha na hora com a mensagem "a server running another release of OneUptime queued it", que manda o operador procurar uma divergência de versão que não existe. Antes de propor: procurar `telemetry of type "undefined"` nos logs do deployment para saber se órfãos ainda acontecem.
+6. **Tiles de CloudWatch para banco gerenciado** (Aurora, DocumentDB, ElastiCache) no catálogo da Overview de Databases. Fork: `c89109ae84`. É feature, não bug: precisa de conversa sobre nomes de métrica antes do PR.
+7. **Dropdown de filtro do `BaseModelTable` com `LIMIT_PER_PROJECT`.** Fork: `2b7435f6ef` (limite 100). A reavaliar antes de propor.
+
+Não são candidatos: os patches de Slack (opinião da Medgrupo, e o upstream já deixa escolher por regra o que posta; ver `lessons-learned.md`, 2026-11-20), o botão de SSO por env (o upstream tem o Global OIDC para isso) e o `AI_RESPONSE_LANGUAGE` (o upstream resolveu por outro caminho).
+
+---
+
+# Histórico: drafts escritos entre 2026-04 e 2026-07
+
+O que segue é o texto original dos drafts, mantido como referência de formato (Summary, Root cause, Change, Test plan). A situação de cada um está na tabela acima.
 
 ---
 
