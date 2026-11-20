@@ -12,9 +12,9 @@ plataforma da Medgrupo, self-hosted. O deploy é por GitOps, no repositório pri
 
 | Ref | Papel |
 |---|---|
-| `medgrupo/<upstream>-r<N>` | **Linha de release.** Tag do upstream mais os patches da Medgrupo. Em 2026-11-19: `medgrupo/14.3.0-r1` |
+| `medgrupo/<upstream>-r<N>` | **Linha de release.** Tag do upstream mais os patches da Medgrupo. Em 2026-11-20: `medgrupo/16.0.0-r1` (tag `16.0.0-medgrupo.1`) |
 | `<upstream>-medgrupo.<n>` (tags) | Uma por imagem. O push da tag dispara o workflow `Medgrupo Build` (`.github/workflows/medgrupo-build.yml`, na linha de release), que builda o app (Community Edition) e o probe do commit da tag, confere os patches, roda os testes deles e publica em `ghcr.io/nidiodolfini/oneuptime-app` e `ghcr.io/nidiodolfini/oneuptime-probe` |
-| `upstream-<versão>` | Tag do upstream sem nada em cima: base do próximo rebase e das branches de contribuição. Em 2026-11-19: `upstream-16.0.0` |
+| `upstream-<versão>` | Tag do upstream sem nada em cima: base das branches de contribuição. Em 2026-11-20: `upstream-16.0.0` |
 | `master` | Este branch. Não use para build |
 
 ## Documentação
